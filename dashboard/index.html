@@ -259,7 +259,10 @@ function renderSchools(infos){
 async function showHist(id){
   const b=boards[id];if(!b)return;
   const sc=SBY[b.census];
-  const s=await db.collection(`boards/${id}/days`).orderBy(firebase.firestore.FieldPath.documentId(),'desc').limit(7).get();
+  // Ascending documentId range query: needs no composite index (day ids are YYYY-MM-DD)
+  const from=new Date(Date.now()-6*864e5).toLocaleDateString('en-CA');
+  const s0=await db.collection(`boards/${id}/days`).orderBy(firebase.firestore.FieldPath.documentId()).startAt(from).get();
+  const s=s0.docs.slice().reverse();
   let h=`<b>${esc(sc?sc.n:'')} - ${esc(b.name)} (${esc(b.location)}), පසුගිය දින 7</b><table><tr><th>දිනය</th><th>ON (විනාඩි)</th><th>භාවිතය (විනාඩි)</th></tr>`;
   s.forEach(d=>h+=`<tr><td>${esc(d.id)}</td><td>${mins(d.data().onSeconds)}</td><td>${mins(d.data().activeSeconds)}</td></tr>`);
   $('hist').innerHTML=h+'</table>';$('hist').hidden=false;$('hist').scrollIntoView({behavior:'smooth'});
