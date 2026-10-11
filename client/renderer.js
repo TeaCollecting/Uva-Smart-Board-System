@@ -42,14 +42,29 @@ else { $('setup').style.display = 'block'; log('Register this Smart Board.'); ip
 
 $('reset').onclick = () => { localStorage.removeItem('board'); location.reload(); };
 
-$('save').onclick = () => {
+function getGeo() { // best effort; the admin can also place the board on the map by hand
+  return new Promise(res => {
+    if (!navigator.geolocation) return res(null);
+    const t = setTimeout(() => res(null), 12000);
+    navigator.geolocation.getCurrentPosition(p => {
+      clearTimeout(t);
+      const g = { lat: +p.coords.latitude.toFixed(5), lng: +p.coords.longitude.toFixed(5), acc: Math.round(p.coords.accuracy) };
+      const inSL = g.lat >= 5.5 && g.lat <= 10 && g.lng >= 79.3 && g.lng <= 82.2; // Sri Lanka only
+      res(inSL ? g : null);
+    }, () => { clearTimeout(t); res(null); }, { timeout: 10000, maximumAge: 600000 });
+  });
+}
+
+$('save').onclick = async () => {
   const census = $('school').value, name = $('name').value.trim(), loc = $('loc').value.trim();
   if (!census || !name || !loc) { log('Select the school and fill in the board name and classroom.'); return; }
   const sc = SCHOOLS.find(s => s.c === census);
+  log('Getting location...');
+  const geo = await getGeo();
   // Each board gets its own login, stored only on this PC. This keeps the same
   // uid after every restart (anonymous sign-in can lose it).
   board = {
-    name, loc, census, school: sc ? sc.n : census,
+    name, loc, census, school: sc ? sc.n : census, geo,
     email: 'board-' + crypto.randomBytes(6).toString('hex') + '@smartboard.local',
     pw: crypto.randomBytes(18).toString('base64')
   };
@@ -79,7 +94,11 @@ async function start(b) {
       const user = await signIn(b);
       ref = db.collection('boards').doc(user.uid); // board id = auth uid
       const snap = await ref.get();
-      if (!snap.exists) await ref.set({ name: b.name, location: b.loc, census: b.census, approved: false, createdAt: TS() });
+      if (!snap.exists) {
+        const doc = { name: b.name, location: b.loc, census: b.census, approved: false, createdAt: TS() };
+        if (b.geo) doc.geo = b.geo;
+        await ref.set(doc);
+      }
       break;
     } catch (e) {
       attempts++;
@@ -93,11 +112,11 @@ async function start(b) {
 
   try {
     // Online/Offline presence (server flips to offline automatically on disconnect)
-    const st = rtdb.ref('status/' + ref.id);
+    const st = rtdb.ref('status/' + ref.id); // { state, last, act } act = last time someone used the board
     const stamp = firebase.database.ServerValue.TIMESTAMP;
     rtdb.ref('.info/connected').on('value', s => {
-      if (s.val()) st.onDisconnect().set({ state: 'offline', last: stamp })
-        .then(() => st.set({ state: 'online', last: stamp }))
+      if (s.val()) st.onDisconnect().update({ state: 'offline', last: stamp })
+        .then(() => st.update({ state: 'online', last: stamp }))
         .catch(console.error);
     });
 
@@ -141,7 +160,8 @@ async function start(b) {
         const idle = await ipcRenderer.invoke('idle');
         const d = today();
         if (d !== day) { if (day) await flush(); await loadDay(d); }
-        on += 60; if (idle < 60) act += 60; dirty++;
+        on += 60; dirty++;
+        if (idle < 60) { act += 60; st.update({ act: stamp }).catch(console.error); }
         if (dirty >= FLUSH_EVERY) await flush();
       } catch (e) { console.error(e); }
     }, 60000);

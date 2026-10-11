@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Admin: can approve / delete boards.
+    // Admin: can approve / delete boards and place them on the map.
     function isAdmin() {
       return request.auth != null
         && request.auth.token.email == 'sudanchamalka@gmail.com'
@@ -22,12 +22,20 @@ service cloud.firestore {
     function isApproved(id) {
       return get(/databases/$(database)/documents/boards/$(id)).data.approved == true;
     }
+    // Optional map location sent by the Smart Board app (Sri Lanka only)
+    function validGeo(g) {
+      return g is map
+        && g.keys().hasOnly(['lat', 'lng', 'acc'])
+        && g.lat is number && g.lat >= 5.5 && g.lat <= 10
+        && g.lng is number && g.lng >= 79.3 && g.lng <= 82.2
+        && g.acc is number && g.acc >= 0;
+    }
 
     match /boards/{id} {
       allow read: if isStaff() || isBoard(id);
 
       allow create: if isBoard(id)
-        && request.resource.data.keys().hasOnly(['name', 'location', 'census', 'approved', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['name', 'location', 'census', 'approved', 'createdAt', 'geo'])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60
         && request.resource.data.location is string
@@ -35,9 +43,11 @@ service cloud.firestore {
         && request.resource.data.census is string
         && request.resource.data.census.matches('[0-9]{3,6}')
         && request.resource.data.approved == false
-        && request.resource.data.createdAt == request.time;
+        && request.resource.data.createdAt == request.time
+        && (!('geo' in request.resource.data) || validGeo(request.resource.data.geo));
 
-      // Admin can change anything (approve). A board can only update its own usage summary.
+      // Admin can change anything (approve, set geo by clicking the map).
+      // A board can only update its own usage summary.
       allow update: if isAdmin()
         || (isBoard(id)
             && request.resource.data.diff(resource.data).affectedKeys()
