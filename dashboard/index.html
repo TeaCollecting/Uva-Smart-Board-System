@@ -1,0 +1,92 @@
+<!doctype html><html lang="si"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Smart Board Dashboard</title>
+<style>
+:root{color-scheme:light dark;--b:#8884}
+body{font-family:system-ui,sans-serif;margin:0;padding:16px;max-width:1000px;margin-inline:auto}
+input,button{padding:9px 12px;margin:4px 0;font-size:15px}
+table{width:100%;border-collapse:collapse}th,td{padding:10px 8px;border-bottom:1px solid var(--b);text-align:left}
+tr.row{cursor:pointer}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+.on{background:#22c55e}.off{background:#ef4444}.wait{background:#f59e0b}
+.wrap{overflow-x:auto}#hist{margin-top:16px;padding:12px;border:1px solid var(--b);border-radius:8px}
+#msg{color:#ef4444}
+</style></head><body>
+<h2>Smart Board Dashboard</h2>
+<p id="msg"></p>
+<div id="login"><input id="em" type="email" placeholder="Admin email"><br>
+<input id="pw" type="password" placeholder="Password"><br><button id="go">Login</button></div>
+<div id="app" style="display:none">
+  <p><span id="sum"></span> <button id="out">Logout</button></p>
+  <div class="wrap"><table><thead><tr><th>Board</th><th>Classroom</th><th>Status</th><th>Last change</th><th>Today on / active</th><th></th></tr></thead>
+  <tbody id="rows"></tbody></table></div>
+  <div id="hist" style="display:none"></div>
+</div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+firebase.initializeApp(firebaseConfig);
+const auth=firebase.auth(),db=firebase.firestore(),rtdb=firebase.database(),$=i=>document.getElementById(i);
+let boards={},status={},unsubs=[];
+const today=()=>new Date().toLocaleDateString('en-CA');
+const hrs=s=>((s||0)/3600).toFixed(1)+'h';
+const ago=t=>t?new Date(t).toLocaleString():'-';
+const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fail=e=>{$('msg').textContent=/permission/i.test(e.message)?'This account is not the admin account.':e.message;};
+
+const login=()=>{$('msg').textContent='';auth.signInWithEmailAndPassword($('em').value.trim(),$('pw').value).catch(fail);};
+$('go').onclick=login;
+$('pw').onkeydown=e=>{if(e.key==='Enter')login();};
+$('out').onclick=()=>auth.signOut();
+
+auth.onAuthStateChanged(u=>{
+  unsubs.forEach(f=>f());unsubs=[];
+  $('login').style.display=u?'none':'block';$('app').style.display=u?'block':'none';
+  $('hist').style.display='none';
+  if(!u)return;
+  // one listener only: each board document carries today's usage summary
+  unsubs.push(db.collection('boards').onSnapshot(s=>{
+    boards={};s.forEach(d=>boards[d.id]=d.data());render();
+  },fail));
+  const r=rtdb.ref('status');
+  const h=r.on('value',s=>{status=s.val()||{};render();},fail);
+  unsubs.push(()=>r.off('value',h));
+});
+
+function render(){
+  const ids=Object.keys(boards).sort((a,b)=>String(boards[a].name).localeCompare(String(boards[b].name)));
+  let on=0;const t=today();
+  $('rows').innerHTML=ids.map(id=>{
+    const b=boards[id],s=status[id]||{},online=s.state==='online';if(online&&b.approved)on++;
+    const isToday=b.todayDate===t;
+    const cls=!b.approved?'wait':online?'on':'off';
+    const label=!b.approved?'Pending':online?'Online':'Offline';
+    return `<tr class="row" data-id="${esc(id)}"><td>${esc(b.name)}</td><td>${esc(b.location)}</td>
+    <td><span class="dot ${cls}"></span>${label}</td><td>${ago(s.last)}</td>
+    <td>${hrs(isToday?b.todayOn:0)} / ${hrs(isToday?b.todayActive:0)}</td>
+    <td>${b.approved?'':`<button data-ok="${esc(id)}">Approve</button> `}<button data-del="${esc(id)}">Delete</button></td></tr>`;}).join('');
+  $('sum').textContent=`${on} online / ${ids.length} boards`;
+}
+
+$('rows').onclick=async e=>{
+  try{
+    const ok=e.target.dataset.ok,del=e.target.dataset.del;
+    if(ok){await db.doc('boards/'+ok).update({approved:true});return;}
+    if(del){
+      if(confirm('Delete board "'+boards[del].name+'"?')){
+        await db.doc('boards/'+del).delete();
+        await rtdb.ref('status/'+del).remove();
+      }
+      return;
+    }
+    const tr=e.target.closest('tr');if(!tr)return;
+    const id=tr.dataset.id;
+    const s=await db.collection(`boards/${id}/days`).orderBy(firebase.firestore.FieldPath.documentId(),'desc').limit(7).get();
+    let h=`<b>${esc(boards[id].name)} - last 7 days</b><table><tr><th>Date</th><th>On</th><th>Active</th></tr>`;
+    s.forEach(d=>h+=`<tr><td>${esc(d.id)}</td><td>${hrs(d.data().onSeconds)}</td><td>${hrs(d.data().activeSeconds)}</td></tr>`);
+    $('hist').innerHTML=h+'</table>';$('hist').style.display='block';
+  }catch(err){fail(err);}
+};
+</script></body></html>

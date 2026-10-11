@@ -1,0 +1,14 @@
+{
+  "rules": {
+    "status": {
+      ".read": "auth != null && auth.token.email == 'sudanchamalka@gmail.com' && auth.token.firebase.sign_in_provider == 'password'",
+      "$id": {
+        ".write": "auth != null && (auth.uid == $id || (auth.token.email == 'sudanchamalka@gmail.com' && auth.token.firebase.sign_in_provider == 'password'))",
+        ".validate": "newData.hasChildren(['state', 'last'])",
+        "state": { ".validate": "newData.val() == 'online' || newData.val() == 'offline'" },
+        "last": { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}
