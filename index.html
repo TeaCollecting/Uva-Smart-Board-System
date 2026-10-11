@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ඌව පලාත් Smart Board නිරීක්ෂණය</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+#map{height:340px;border-radius:10px;margin:8px 0}
+body{font-family:system-ui,'Noto Sans Sinhala',sans-serif;margin:0;padding:12px;background:#f1f5f9;color:#0f172a;max-width:1250px;margin-inline:auto}
+input,select,button{padding:9px;border-radius:8px;border:1px solid #cbd5e1;font-size:15px;margin:3px 0;background:#fff;color:#0f172a}
+button{background:#2563eb;color:#fff;border:0;cursor:pointer}
+button.gray{background:#64748b}button.sm{padding:5px 8px;font-size:13px}button.red{background:#dc2626}
+.top{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.filters{display:flex;flex-wrap:wrap;gap:8px}.filters select,.filters input{flex:1 1 150px;min-width:0}
+details{margin:6px 0}summary{cursor:pointer;color:#475569;font-size:14px}
+.stats{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.stat{flex:1 1 110px;background:#fff;border-radius:10px;padding:10px;text-align:center;font-size:13px;color:#475569}
+.stat b{display:block;font-size:22px;color:#0f172a}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+.tabs button[aria-pressed=false]{background:#e2e8f0;color:#0f172a}
+.wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;font-size:14px}
+th,td{padding:8px;text-align:left;border-bottom:1px solid #e2e8f0;vertical-align:top}
+th{color:#64748b;font-weight:600;white-space:nowrap}
+tr.row,tr.brow{cursor:pointer}tr.row:hover,tr.brow:hover{background:#f8fafc}
+tr.sub>td{padding:0 0 8px 24px;background:#f8fafc}table.inner{border-radius:0}
+small,.mut{color:#64748b}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+.d-on{background:#16a34a}.d-idle{background:#d97706}.d-off{background:#dc2626}.d-pending{background:#64748b}.d-none{background:#cbd5e1}
+.on{color:#16a34a;font-weight:600}.idle{color:#d97706;font-weight:600}.off{color:#dc2626;font-weight:600}.pending{color:#64748b;font-weight:600}
+#msg{color:#dc2626;min-height:1em}
+#hint{background:#dbeafe;border-radius:8px;padding:8px;margin:6px 0}
+#hist{margin-top:16px;padding:12px;background:#fff;border-radius:10px}
+</style>
+</head>
+<body>
+<p id="msg"></p>
+<div id="login">
+  <h3>පරිපාලක පිවිසුම</h3>
+  <input id="em" type="email" placeholder="Email"><br>
+  <input id="pw" type="password" placeholder="Password"><br>
+  <button id="go">Login</button>
+</div>
+
+<div id="app" hidden>
+  <div class="top">
+    <h3>ඌව පලාත් Smart Board නිරීක්ෂණය</h3>
+    <span><button id="csv" class="sm">CSV</button> <button id="out" class="sm gray">ඉවත් වන්න</button></span>
+  </div>
+
+  <div class="filters">
+    <select id="fd" data-k="d"></select>
+    <select id="fz" data-k="z"></select>
+    <select id="fs" data-k="st">
+      <option value="">සියලු තත්ත්ව</option><option value="on">Active (භාවිතයේ)</option>
+      <option value="idle">Online නමුත් භාවිතා නොවේ</option><option value="off">Offline</option>
+      <option value="pending">අනුමත කර නැත</option></select>
+    <input id="fq" placeholder="පාසල / census අංකය / පන්තිය සොයන්න">
+  </div>
+  <details><summary>තවත් ෆිල්ටර් (කොට්ඨාසය, පාසල් වර්ගය, මාධ්‍යය, ස්ත්‍රී පුරුෂ භාවය)</summary>
+    <div class="filters">
+      <select id="fv" data-k="v"></select><select id="ft" data-k="t"></select>
+      <select id="fm" data-k="m"></select><select id="fg" data-k="g"></select>
+    </div>
+  </details>
+
+  <div class="stats" id="stats"></div>
+
+  <div id="hint" hidden>සිතියමේ බෝඩ් එක ඇති ස්ථානය ක්ලික් කරන්න.</div>
+  <div id="map"></div>
+  <small id="nogeo"></small>
+
+  <div class="tabs">
+    <button id="vb" aria-pressed="true">බෝඩ් අනුව</button>
+    <button id="vs" aria-pressed="false">පාසල් අනුව</button>
+    <label><input type="checkbox" id="empty"> බෝඩ් නැති පාසල් ද පෙන්වන්න</label>
+    <button id="clear" class="sm gray">ෆිල්ටර් ඉවත් කරන්න</button>
+  </div>
+
+  <div class="wrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+  <div id="hist" hidden></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="schools.js"></script>
+<script>
+firebase.initializeApp(firebaseConfig);
+const auth=firebase.auth(),db=firebase.firestore(),rtdb=firebase.database(),$=i=>document.getElementById(i);
+const SBY={};SCHOOLS.forEach(s=>SBY[s.c]=s);
+let boards={},status={},unsubs=[],view='board',map,layer,placing=null;const expanded=new Set();
+const F={d:'',z:'',v:'',t:'',m:'',g:'',st:'',q:''};
+const IDLE_MIN=30; // no touch/mouse/key for 30 min = "Online නමුත් භාවිතා නොවේ"
+const today=()=>new Date().toLocaleDateString('en-CA');
+const mins=s=>Math.round((s||0)/60);
+const hrs=s=>((s||0)/3600).toFixed(1)+'h';
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const lab={on:'Active',idle:'Online (භාවිතා නොවේ)',off:'Offline',pending:'අනුමත කර නැත'};
+const COL={on:'#16a34a',idle:'#d97706',off:'#dc2626',pending:'#64748b'};
+const dot=c=>`<span class="dot d-${c}"></span>`;
+const uniq=a=>[...new Set(a)].sort((x,y)=>String(x).localeCompare(String(y)));
+const fail=e=>{$('msg').textContent=/permission/i.test(e.message)?'මෙම ක්‍රියාවට ඔබට අවසර නැත.':e.message;};
+const lastSeen=x=>x.state==='on'||x.state==='idle'?'දැන් සම්බන්ධයි':(x.s.last?new Date(x.s.last).toLocaleString():'-');
+
+/* ---------- login ---------- */
+const login=()=>{$('msg').textContent='';auth.signInWithEmailAndPassword($('em').value.trim(),$('pw').value).catch(fail);};
+$('go').onclick=login;
+$('pw').onkeydown=e=>{if(e.key==='Enter')login();};
+$('out').onclick=()=>auth.signOut();
+auth.onAuthStateChanged(u=>{
+  unsubs.forEach(f=>f());unsubs=[];
+  $('msg').textContent='';
+  $('login').hidden=!!u;$('app').hidden=!u;$('hist').hidden=true;
+  if(!u)return;
+  initMap();refreshFilters();
+  unsubs.push(db.collection('boards').onSnapshot(s=>{boards={};s.forEach(d=>boards[d.id]=d.data());render();},fail));
+  const r=rtdb.ref('status');
+  const h=r.on('value',s=>{status=s.val()||{};render();},fail);
+  unsubs.push(()=>r.off('value',h));
+});
+setInterval(()=>{if(!$('app').hidden)render();},60000); // idle/active changes with time
+
+/* ---------- map ---------- */
+function initMap(){
+  if(map){map.invalidateSize();return;}
+  if(typeof L==='undefined'){$('map').hidden=true;return;}
+  map=L.map('map').setView([6.95,81.1],9); // ඌව පලාත
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'© OpenStreetMap'}).addTo(map);
+  layer=L.layerGroup().addTo(map);
+  map.on('click',async e=>{
+    if(!placing)return;
+    const id=placing;placing=null;$('hint').hidden=true;
+    try{await db.doc('boards/'+id).update({geo:{lat:+e.latlng.lat.toFixed(5),lng:+e.latlng.lng.toFixed(5),acc:0}});}catch(err){fail(err);}
+  });
+}
+function drawMap(list,fit){
+  if(!map)return;
+  layer.clearLayers();const pts=[];
+  list.filter(x=>x.b.geo).forEach(x=>{
+    const g=x.b.geo;pts.push([g.lat,g.lng]);
+    L.circleMarker([g.lat,g.lng],{radius:8,color:COL[x.state],fillOpacity:.8})
+      .bindPopup(`<b>${esc(x.sc?x.sc.n:'')}</b><br>${esc(x.b.name)} (${esc(x.b.location)})<br>${lab[x.state]}<br>${g.acc?'±'+g.acc+'m':'අතින් සලකුණු කළා'}`).addTo(layer);
+  });
+  const n=list.filter(x=>!x.b.geo).length;
+  $('nogeo').textContent=n?`ස්ථානය නැති බෝඩ් ${n}ක් ඇත. පේළියේ "ස්ථානය" බොත්තමෙන් සිතියමේ සලකුණු කරන්න.`:'';
+  if(fit&&pts.length)map.fitBounds(pts,{maxZoom:13,padding:[30,30]});
+}
+
+/* ---------- filters ---------- */
+function opts(sel,vals,cur,all){sel.innerHTML='<option value="">'+all+'</option>'+vals.map(v=>`<option${v===cur?' selected':''}>${esc(v)}</option>`).join('');}
+function refreshFilters(){
+  opts($('fd'),uniq(SCHOOLS.map(s=>s.d)),F.d,'සියලු දිස්ත්‍රික්ක');
+  const bz=SCHOOLS.filter(s=>!F.d||s.d===F.d);opts($('fz'),uniq(bz.map(s=>s.z)),F.z,'සියලු කලාප');
+  const bv=bz.filter(s=>!F.z||s.z===F.z);opts($('fv'),uniq(bv.map(s=>s.v)),F.v,'සියලු කොට්ඨාස');
+  opts($('ft'),uniq(SCHOOLS.map(s=>s.t)),F.t,'සියලු පාසල් වර්ග');
+  opts($('fm'),uniq(SCHOOLS.map(s=>s.m)),F.m,'සියලු මාධ්‍ය');
+  opts($('fg'),uniq(SCHOOLS.map(s=>s.g)),F.g,'සියලු (පිරිමි/ගැහැණු/මිශ්‍ර)');
+}
+document.querySelectorAll('select[data-k]').forEach(sel=>sel.onchange=()=>{
+  const k=sel.dataset.k;F[k]=sel.value;
+  if(k==='d'){F.z='';F.v='';}if(k==='z'){F.v='';}
+  refreshFilters();render(true);
+});
+$('fq').oninput=()=>{F.q=$('fq').value.trim().toLowerCase();render(true);};
+$('empty').onchange=()=>render();
+$('clear').onclick=()=>{Object.keys(F).forEach(k=>F[k]='');$('fq').value='';$('fs').value='';refreshFilters();render(true);};
+const setView=v=>{view=v;$('vs').setAttribute('aria-pressed',v==='school');$('vb').setAttribute('aria-pressed',v==='board');render();};
+$('vs').onclick=()=>setView('school');$('vb').onclick=()=>setView('board');
+
+const sMatch=s=>(!F.d||s.d===F.d)&&(!F.z||s.z===F.z)&&(!F.v||s.v===F.v)&&(!F.t||s.t===F.t)&&(!F.m||s.m===F.m)&&(!F.g||s.g===F.g);
+const schoolFilterOn=()=>!!(F.d||F.z||F.v||F.t||F.m||F.g);
+
+function info(id){
+  const b=boards[id],s=status[id]||{},isT=b.todayDate===today();
+  const online=s.state==='online';
+  const state=!b.approved?'pending':!online?'off':(s.act&&Date.now()-s.act<IDLE_MIN*60000?'on':'idle');
+  return{id,b,s,state,on:isT?(b.todayOn||0):0,act:isT?(b.todayActive||0):0,sc:SBY[b.census]};
+}
+function bMatch(x){
+  if(x.sc){if(!sMatch(x.sc))return false;}else if(schoolFilterOn())return false;
+  if(F.st&&x.state!==F.st)return false;
+  if(F.q){
+    const h=[x.b.name,x.b.location,x.b.census,x.sc&&x.sc.n,x.sc&&x.sc.a].join(' ').toLowerCase();
+    if(!h.includes(F.q))return false;
+  }
+  return true;
+}
+const currentInfos=()=>Object.keys(boards).map(info).filter(bMatch);
+
+/* ---------- render ---------- */
+function render(fit){
+  if($('app').hidden)return;
+  const infos=currentInfos();
+  const c={on:0,idle:0,off:0,pending:0},cov=new Set();
+  infos.forEach(x=>{c[x.state]++;if(x.sc)cov.add(x.sc.c);});
+  const stat=(v,l)=>`<div class="stat"><b>${v}</b>${l}</div>`;
+  $('stats').innerHTML=stat(infos.length,'Total')+stat(c.on+c.idle,'Online')+stat(c.on,'Active (භාවිතයේ)')
+    +stat(c.idle,'භාවිතා නොවේ')+stat(c.off,'Offline')+stat(c.pending,'අනුමත කර නැත')
+    +stat(`${cov.size} / ${SCHOOLS.filter(sMatch).length}`,'බෝඩ් ඇති පාසල්');
+  drawMap(infos,fit===true);
+  if(view==='school')renderSchools(infos);else renderBoards(infos);
+}
+const actions=x=>(x.b.approved?'':`<button class="sm" data-ok="${esc(x.id)}">අනුමත කරන්න</button> `)
+  +`<button class="sm gray" data-geo="${esc(x.id)}">ස්ථානය</button> <button class="sm gray" data-hist="${esc(x.id)}">History</button> <button class="sm red" data-del="${esc(x.id)}">මකන්න</button>`;
+const usage=x=>`${mins(x.act)} <small>(ON ${mins(x.on)})</small>`;
+
+function renderBoards(infos){
+  $('thead').innerHTML='<tr><th>පාසල</th><th>කලාපය / කොට්ඨාසය</th><th>Board</th><th>තත්ත්වය</th><th>අද විනාඩි (භාවිත)</th><th>අවසන් සම්බන්ධය</th><th></th></tr>';
+  const list=infos.slice().sort((a,b)=>(a.sc?a.sc.n:'~').localeCompare(b.sc?b.sc.n:'~')||String(a.b.name).localeCompare(b.b.name));
+  $('tbody').innerHTML=list.map(x=>`<tr class="brow" data-board="${esc(x.id)}">
+    <td>${x.sc?`<b>${esc(x.sc.n)}</b><br><small>Census ${esc(x.sc.c)}, ${esc(x.sc.d)}</small>`:`<span class="mut">(ලැයිස්තුවේ නැති පාසලක්)</span>`}</td>
+    <td>${x.sc?`${esc(x.sc.z)}<br><small>${esc(x.sc.v)}</small>`:''}</td>
+    <td>${esc(x.b.name)}<br><small>${esc(x.b.location)}</small></td>
+    <td class="${x.state}">${dot(x.state)}${lab[x.state]}</td>
+    <td>${usage(x)}</td><td>${lastSeen(x)}</td><td>${actions(x)}</td></tr>`).join('')
+    ||'<tr><td colspan="7" class="mut">ෆිල්ටර්වලට ගැළපෙන දෙයක් නැත.</td></tr>';
+}
+
+function renderSchools(infos){
+  $('thead').innerHTML='<tr><th>පාසල</th><th>කලාපය / කොට්ඨාසය</th><th>වර්ගය / මාධ්‍යය</th><th>බෝඩ්</th><th>අද විනාඩි (භාවිත)</th></tr>';
+  const by={};infos.forEach(x=>{const k=x.b.census||'?';(by[k]=by[k]||[]).push(x);});
+  const rows=[];
+  SCHOOLS.forEach(s=>{
+    if(!sMatch(s))return;
+    const bs=by[s.c]||[];
+    if(!bs.length){
+      if(!$('empty').checked||F.st)return;
+      if(F.q&&!(s.n+' '+s.c+' '+s.a).toLowerCase().includes(F.q))return;
+    }
+    rows.push({s,bs});
+  });
+  Object.keys(by).filter(k=>!SBY[k]).forEach(k=>rows.push({s:{c:k,n:'(ලැයිස්තුවේ නැති පාසලක්)',a:'',d:'',z:'',v:'',t:'',m:''},bs:by[k]}));
+  rows.sort((a,b)=>(b.bs.length>0)-(a.bs.length>0)||a.s.n.localeCompare(b.s.n));
+  $('tbody').innerHTML=rows.map(({s,bs})=>{
+    const n=st=>bs.filter(x=>x.state===st).length;
+    const online=n('on')+n('idle');
+    const cls=!bs.length?'none':n('pending')===bs.length?'pending':n('on')?'on':n('idle')?'idle':'off';
+    const sumAct=bs.reduce((a,x)=>a+x.act,0),sumOn=bs.reduce((a,x)=>a+x.on,0);
+    let h=`<tr class="row" data-school="${esc(s.c)}"><td>${dot(cls)}<b>${esc(s.n)}</b><br><small>Census ${esc(s.c)}, ${esc(s.d)}</small></td>
+      <td>${esc(s.z)}<br><small>${esc(s.v)}</small></td><td>${esc(s.t)}<br><small>${esc(s.m)}</small></td>
+      <td>${bs.length?`${online} / ${bs.length} online${n('pending')?`, ${n('pending')} අනුමත කර නැත`:''}`:'<span class="mut">බෝඩ් නැත</span>'}</td>
+      <td>${bs.length?`${mins(sumAct)} <small>(ON ${mins(sumOn)})</small>`:'-'}</td></tr>`;
+    if(bs.length&&expanded.has(s.c)){
+      h+=`<tr class="sub"><td colspan="5"><table class="inner"><tr><th>Board</th><th>තත්ත්වය</th><th>අවසන් සම්බන්ධය</th><th>අද විනාඩි</th><th></th></tr>`
+        +bs.sort((a,b)=>String(a.b.name).localeCompare(b.b.name)).map(x=>`<tr><td>${esc(x.b.name)} <small>${esc(x.b.location)}</small></td>
+          <td class="${x.state}">${dot(x.state)}${lab[x.state]}</td><td>${lastSeen(x)}</td><td>${usage(x)}</td><td>${actions(x)}</td></tr>`).join('')
+        +`</table></td></tr>`;
+    }
+    return h;
+  }).join('')||'<tr><td colspan="5" class="mut">ෆිල්ටර්වලට ගැළපෙන දෙයක් නැත.</td></tr>';
+}
+
+/* ---------- history, approve, delete, location ---------- */
+async function showHist(id){
+  const b=boards[id];if(!b)return;
+  const sc=SBY[b.census];
+  const s=await db.collection(`boards/${id}/days`).orderBy(firebase.firestore.FieldPath.documentId(),'desc').limit(7).get();
+  let h=`<b>${esc(sc?sc.n:'')} - ${esc(b.name)} (${esc(b.location)}), පසුගිය දින 7</b><table><tr><th>දිනය</th><th>ON (විනාඩි)</th><th>භාවිතය (විනාඩි)</th></tr>`;
+  s.forEach(d=>h+=`<tr><td>${esc(d.id)}</td><td>${mins(d.data().onSeconds)}</td><td>${mins(d.data().activeSeconds)}</td></tr>`);
+  $('hist').innerHTML=h+'</table>';$('hist').hidden=false;$('hist').scrollIntoView({behavior:'smooth'});
+}
+$('app').onclick=async e=>{
+  try{
+    const t=e.target,d=t.dataset;
+    if(d.ok){await db.doc('boards/'+d.ok).update({approved:true});return;}
+    if(d.del){
+      if(confirm('"'+boards[d.del].name+'" බෝඩ් එක මකන්නද?')){
+        await db.doc('boards/'+d.del).delete();
+        await rtdb.ref('status/'+d.del).remove();
+      }
+      return;
+    }
+    if(d.hist){await showHist(d.hist);return;}
+    if(d.geo){
+      if(!map){$('msg').textContent='සිතියම පූරණය වී නැත.';return;}
+      placing=d.geo;$('hint').hidden=false;$('map').scrollIntoView({behavior:'smooth'});return;
+    }
+    if(t.closest('button,input,select,label,summary'))return;
+    const rs=t.closest('tr[data-school]');
+    if(rs){const c=rs.dataset.school;expanded.has(c)?expanded.delete(c):expanded.add(c);render();return;}
+    const rb=t.closest('tr[data-board]');
+    if(rb)await showHist(rb.dataset.board);
+  }catch(err){fail(err);}
+};
+
+/* ---------- CSV export (current filters) ---------- */
+$('csv').onclick=()=>{
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const head=['Census','School','District','Zone','Division','Type','Medium','Board','Classroom','Status','Today active (min)','Today on (min)'];
+  const lines=[head.map(q).join(',')];
+  currentInfos().forEach(x=>{const s=x.sc||{};
+    lines.push([x.b.census,s.n,s.d,s.z,s.v,s.t,s.m,x.b.name,x.b.location,lab[x.state],mins(x.act),mins(x.on)].map(q).join(','));});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}));
+  a.download='smartboards-'+today()+'.csv';a.click();
+};
+</script>
+</body>
+</html>
