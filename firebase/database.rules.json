@@ -7,6 +7,7 @@
         ".validate": "newData.hasChildren(['state', 'last'])",
         "state": { ".validate": "newData.val() == 'online' || newData.val() == 'offline'" },
         "last": { ".validate": "newData.isNumber()" },
+        "act": { ".validate": "newData.isNumber()" },
         "$other": { ".validate": false }
       }
     }
