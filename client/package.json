@@ -12,7 +12,7 @@
   "build": {
     "appId": "lk.school.smartboardagent",
     "productName": "SmartBoardAgent",
-    "files": ["main.js", "index.html", "renderer.js", "firebase-config.js", "package.json"],
+    "files": ["main.js", "index.html", "renderer.js", "firebase-config.js", "schools.json", "package.json"],
     "win": { "target": "nsis" }
   }
 }

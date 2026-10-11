@@ -1,92 +1,240 @@
-<!doctype html><html lang="si"><head><meta charset="utf-8">
+<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Smart Board Dashboard</title>
+<title>Uva Province Smart Board Dashboard</title>
 <style>
-:root{color-scheme:light dark;--b:#8884}
-body{font-family:system-ui,sans-serif;margin:0;padding:16px;max-width:1000px;margin-inline:auto}
-input,button{padding:9px 12px;margin:4px 0;font-size:15px}
-table{width:100%;border-collapse:collapse}th,td{padding:10px 8px;border-bottom:1px solid var(--b);text-align:left}
-tr.row{cursor:pointer}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
-.on{background:#22c55e}.off{background:#ef4444}.wait{background:#f59e0b}
+:root{color-scheme:light dark;--b:#8884;--mut:#7d838c;--ok:#16a34a;--bad:#dc2626;--wait:#d97706}
+body{font-family:system-ui,'Noto Sans Sinhala',sans-serif;margin:0;padding:16px;max-width:1200px;margin-inline:auto}
+h2{margin:4px 0 12px}
+input,button,select{padding:8px 10px;margin:3px 0;font-size:14px}
+select,input[type=search]{min-width:0}
+.filters{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin:12px 0}
+.filters label{display:flex;flex-direction:column;font-size:12px;color:var(--mut)}
+.filters select,.filters input{margin:2px 0 0;font-size:14px;color:inherit}
+.stats{display:flex;flex-wrap:wrap;gap:24px;margin:12px 0}
+.stats div{display:flex;flex-direction:column}.stats b{font-size:22px}.stats span{font-size:12px;color:var(--mut)}
+.tabs{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0}
+.tabs button[aria-pressed=true]{font-weight:700;outline:2px solid var(--b)}
+table{width:100%;border-collapse:collapse}th,td{padding:9px 8px;border-bottom:1px solid var(--b);text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--mut);font-weight:600}
+tr.row,tr.brow{cursor:pointer}tr.row:hover,tr.brow:hover{background:#8881}
+tr.sub>td{padding:0 0 8px 28px;background:#8880}
+table.inner{width:100%}table.inner td,table.inner th{padding:6px 8px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+.on{background:var(--ok)}.off{background:var(--bad)}.wait{background:var(--wait)}.none{background:#8886}
+.mut{color:var(--mut)}small{color:var(--mut)}
 .wrap{overflow-x:auto}#hist{margin-top:16px;padding:12px;border:1px solid var(--b);border-radius:8px}
-#msg{color:#ef4444}
+#msg{color:var(--bad);min-height:1em}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
 </style></head><body>
-<h2>Smart Board Dashboard</h2>
+<h2>Uva Province Smart Board Dashboard</h2>
 <p id="msg"></p>
-<div id="login"><input id="em" type="email" placeholder="Admin email"><br>
+<div id="login"><input id="em" type="email" placeholder="Email"><br>
 <input id="pw" type="password" placeholder="Password"><br><button id="go">Login</button></div>
+
 <div id="app" style="display:none">
-  <p><span id="sum"></span> <button id="out">Logout</button></p>
-  <div class="wrap"><table><thead><tr><th>Board</th><th>Classroom</th><th>Status</th><th>Last change</th><th>Today on / active</th><th></th></tr></thead>
-  <tbody id="rows"></tbody></table></div>
+  <div class="bar"><div class="stats" id="stats"></div>
+    <div><button id="csv">Export CSV</button> <button id="out">Logout</button></div></div>
+
+  <div class="filters">
+    <label>District<select id="fd" data-k="d"></select></label>
+    <label>Zone<select id="fz" data-k="z"></select></label>
+    <label>Education division<select id="fv" data-k="v"></select></label>
+    <label>School type<select id="ft" data-k="t"></select></label>
+    <label>Medium<select id="fm" data-k="m"></select></label>
+    <label>Gender<select id="fg" data-k="g"></select></label>
+    <label>Board status<select id="fs" data-k="st">
+      <option value="">All</option><option value="online">Online</option>
+      <option value="offline">Offline</option><option value="pending">Pending approval</option></select></label>
+    <label>Search<input id="fq" type="search" placeholder="School, census no, classroom"></label>
+  </div>
+  <div class="tabs">
+    <button id="vs" aria-pressed="true">By school</button>
+    <button id="vb" aria-pressed="false">All boards</button>
+    <label><input type="checkbox" id="empty"> Show schools without boards</label>
+    <button id="clear">Clear filters</button>
+  </div>
+
+  <div class="wrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
   <div id="hist" style="display:none"></div>
 </div>
+
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="firebase-config.js"></script>
+<script src="schools.js"></script>
 <script>
 firebase.initializeApp(firebaseConfig);
 const auth=firebase.auth(),db=firebase.firestore(),rtdb=firebase.database(),$=i=>document.getElementById(i);
-let boards={},status={},unsubs=[];
+const SBY={};SCHOOLS.forEach(s=>SBY[s.c]=s);
+let boards={},status={},unsubs=[],view='school';const expanded=new Set();
+const F={d:'',z:'',v:'',t:'',m:'',g:'',st:'',q:''};
 const today=()=>new Date().toLocaleDateString('en-CA');
 const hrs=s=>((s||0)/3600).toFixed(1)+'h';
 const ago=t=>t?new Date(t).toLocaleString():'-';
-const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const fail=e=>{$('msg').textContent=/permission/i.test(e.message)?'This account is not the admin account.':e.message;};
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const lab={online:'Online',offline:'Offline',pending:'Pending'};
+const dot=c=>`<span class="dot ${c}"></span>`;
+const uniq=a=>[...new Set(a)].sort((x,y)=>String(x).localeCompare(String(y)));
+const fail=e=>{$('msg').textContent=/permission/i.test(e.message)?'You do not have permission for this action.':e.message;};
 
+/* ---------- login ---------- */
 const login=()=>{$('msg').textContent='';auth.signInWithEmailAndPassword($('em').value.trim(),$('pw').value).catch(fail);};
 $('go').onclick=login;
 $('pw').onkeydown=e=>{if(e.key==='Enter')login();};
 $('out').onclick=()=>auth.signOut();
-
 auth.onAuthStateChanged(u=>{
   unsubs.forEach(f=>f());unsubs=[];
+  $('msg').textContent='';
   $('login').style.display=u?'none':'block';$('app').style.display=u?'block':'none';
   $('hist').style.display='none';
   if(!u)return;
-  // one listener only: each board document carries today's usage summary
-  unsubs.push(db.collection('boards').onSnapshot(s=>{
-    boards={};s.forEach(d=>boards[d.id]=d.data());render();
-  },fail));
+  refreshFilters();
+  // one listener: each board document carries today's usage summary
+  unsubs.push(db.collection('boards').onSnapshot(s=>{boards={};s.forEach(d=>boards[d.id]=d.data());render();},fail));
   const r=rtdb.ref('status');
   const h=r.on('value',s=>{status=s.val()||{};render();},fail);
   unsubs.push(()=>r.off('value',h));
 });
 
+/* ---------- filters ---------- */
+function opts(sel,vals,cur,all){sel.innerHTML='<option value="">'+all+'</option>'+vals.map(v=>`<option${v===cur?' selected':''}>${esc(v)}</option>`).join('');}
+function refreshFilters(){
+  opts($('fd'),uniq(SCHOOLS.map(s=>s.d)),F.d,'All districts');
+  const bz=SCHOOLS.filter(s=>!F.d||s.d===F.d);opts($('fz'),uniq(bz.map(s=>s.z)),F.z,'All zones');
+  const bv=bz.filter(s=>!F.z||s.z===F.z);opts($('fv'),uniq(bv.map(s=>s.v)),F.v,'All divisions');
+  opts($('ft'),uniq(SCHOOLS.map(s=>s.t)),F.t,'All types');
+  opts($('fm'),uniq(SCHOOLS.map(s=>s.m)),F.m,'All media');
+  opts($('fg'),uniq(SCHOOLS.map(s=>s.g)),F.g,'All');
+}
+document.querySelectorAll('.filters select').forEach(sel=>sel.onchange=()=>{
+  const k=sel.dataset.k;F[k]=sel.value;
+  if(k==='d'){F.z='';F.v='';}if(k==='z'){F.v='';}
+  refreshFilters();render();
+});
+$('fq').oninput=()=>{F.q=$('fq').value.trim().toLowerCase();render();};
+$('empty').onchange=render;
+$('clear').onclick=()=>{Object.keys(F).forEach(k=>F[k]='');$('fq').value='';$('fs').value='';refreshFilters();render();};
+const setView=v=>{view=v;$('vs').setAttribute('aria-pressed',v==='school');$('vb').setAttribute('aria-pressed',v==='board');render();};
+$('vs').onclick=()=>setView('school');$('vb').onclick=()=>setView('board');
+
+const sMatch=s=>(!F.d||s.d===F.d)&&(!F.z||s.z===F.z)&&(!F.v||s.v===F.v)&&(!F.t||s.t===F.t)&&(!F.m||s.m===F.m)&&(!F.g||s.g===F.g);
+const schoolFilterOn=()=>!!(F.d||F.z||F.v||F.t||F.m||F.g);
+
+function info(id){
+  const b=boards[id],s=status[id]||{},online=s.state==='online';
+  const state=!b.approved?'pending':online?'online':'offline',isT=b.todayDate===today();
+  return{id,b,s,state,on:isT?(b.todayOn||0):0,act:isT?(b.todayActive||0):0,sc:SBY[b.census]};
+}
+function bMatch(x){
+  if(x.sc){if(!sMatch(x.sc))return false;}else if(schoolFilterOn())return false;
+  if(F.st&&x.state!==F.st)return false;
+  if(F.q){
+    const h=[x.b.name,x.b.location,x.b.census,x.sc&&x.sc.n,x.sc&&x.sc.a].join(' ').toLowerCase();
+    if(!h.includes(F.q))return false;
+  }
+  return true;
+}
+const currentInfos=()=>Object.keys(boards).map(info).filter(bMatch);
+
+/* ---------- render ---------- */
 function render(){
-  const ids=Object.keys(boards).sort((a,b)=>String(boards[a].name).localeCompare(String(boards[b].name)));
-  let on=0;const t=today();
-  $('rows').innerHTML=ids.map(id=>{
-    const b=boards[id],s=status[id]||{},online=s.state==='online';if(online&&b.approved)on++;
-    const isToday=b.todayDate===t;
-    const cls=!b.approved?'wait':online?'on':'off';
-    const label=!b.approved?'Pending':online?'Online':'Offline';
-    return `<tr class="row" data-id="${esc(id)}"><td>${esc(b.name)}</td><td>${esc(b.location)}</td>
-    <td><span class="dot ${cls}"></span>${label}</td><td>${ago(s.last)}</td>
-    <td>${hrs(isToday?b.todayOn:0)} / ${hrs(isToday?b.todayActive:0)}</td>
-    <td>${b.approved?'':`<button data-ok="${esc(id)}">Approve</button> `}<button data-del="${esc(id)}">Delete</button></td></tr>`;}).join('');
-  $('sum').textContent=`${on} online / ${ids.length} boards`;
+  if($('app').style.display==='none')return;
+  const infos=currentInfos();
+  const c={online:0,offline:0,pending:0},cov=new Set();let on=0,act=0;
+  infos.forEach(x=>{c[x.state]++;on+=x.on;act+=x.act;if(x.sc)cov.add(x.sc.c);});
+  const stat=(v,l)=>`<div><b>${v}</b><span>${l}</span></div>`;
+  $('stats').innerHTML=stat(`${c.online} / ${infos.length}`,'boards online')+stat(c.pending,'waiting for approval')
+    +stat(`${cov.size} / ${SCHOOLS.filter(sMatch).length}`,'schools with a board')
+    +stat(hrs(on),'on today (all boards)')+stat(hrs(act),'actively used today');
+  if(view==='school')renderSchools(infos);else renderBoards(infos);
+}
+const actions=x=>(x.b.approved?'':`<button data-ok="${esc(x.id)}">Approve</button> `)
+  +`<button data-hist="${esc(x.id)}">History</button> <button data-del="${esc(x.id)}">Delete</button>`;
+
+function renderSchools(infos){
+  $('thead').innerHTML='<tr><th>School</th><th>Zone / Division</th><th>Type / Medium</th><th>Boards</th><th>Today on / active</th></tr>';
+  const by={};infos.forEach(x=>{const k=x.b.census||'?';(by[k]=by[k]||[]).push(x);});
+  const rows=[];
+  SCHOOLS.forEach(s=>{
+    if(!sMatch(s))return;
+    const bs=by[s.c]||[];
+    if(!bs.length){
+      if(!$('empty').checked||F.st)return;
+      if(F.q&&!(s.n+' '+s.c+' '+s.a).toLowerCase().includes(F.q))return;
+    }
+    rows.push({s,bs});
+  });
+  Object.keys(by).filter(k=>!SBY[k]).forEach(k=>rows.push({s:{c:k,n:'(School not in list)',a:'',d:'',z:'',v:'',t:'',m:''},bs:by[k]}));
+  rows.sort((a,b)=>(b.bs.length>0)-(a.bs.length>0)||a.s.n.localeCompare(b.s.n));
+  $('tbody').innerHTML=rows.map(({s,bs})=>{
+    const on=bs.filter(x=>x.state==='online').length,pend=bs.filter(x=>x.state==='pending').length;
+    const cls=!bs.length?'none':pend===bs.length?'wait':on?'on':'off';
+    const sumOn=bs.reduce((a,x)=>a+x.on,0),sumAct=bs.reduce((a,x)=>a+x.act,0);
+    let h=`<tr class="row" data-school="${esc(s.c)}"><td>${dot(cls)}<b>${esc(s.n)}</b><br><small>Census ${esc(s.c)}, ${esc(s.d)}</small></td>
+      <td>${esc(s.z)}<br><small>${esc(s.v)}</small></td><td>${esc(s.t)}<br><small>${esc(s.m)}</small></td>
+      <td>${bs.length?`${on} of ${bs.length} online${pend?`, ${pend} pending`:''}`:'<span class="mut">No board</span>'}</td>
+      <td>${bs.length?`${hrs(sumOn)} / ${hrs(sumAct)}`:'-'}</td></tr>`;
+    if(bs.length&&expanded.has(s.c)){
+      h+=`<tr class="sub"><td colspan="5"><table class="inner"><tr><th>Board</th><th>Status</th><th>Last change</th><th>Today on / active</th><th></th></tr>`
+        +bs.sort((a,b)=>String(a.b.name).localeCompare(b.b.name)).map(x=>`<tr><td>${esc(x.b.name)} <small>${esc(x.b.location)}</small></td>
+          <td>${dot(x.state)}${lab[x.state]}</td><td>${ago(x.s.last)}</td><td>${hrs(x.on)} / ${hrs(x.act)}</td><td>${actions(x)}</td></tr>`).join('')
+        +`</table></td></tr>`;
+    }
+    return h;
+  }).join('')||'<tr><td colspan="5" class="mut">Nothing matches these filters.</td></tr>';
 }
 
-$('rows').onclick=async e=>{
+function renderBoards(infos){
+  $('thead').innerHTML='<tr><th>School</th><th>Zone / Division</th><th>Board</th><th>Status</th><th>Last change</th><th>Today on / active</th><th></th></tr>';
+  const list=infos.slice().sort((a,b)=>(a.sc?a.sc.n:'~').localeCompare(b.sc?b.sc.n:'~')||String(a.b.name).localeCompare(b.b.name));
+  $('tbody').innerHTML=list.map(x=>`<tr class="brow" data-board="${esc(x.id)}">
+    <td>${x.sc?`<b>${esc(x.sc.n)}</b><br><small>Census ${esc(x.sc.c)}</small>`:`<span class="mut">(School not in list)</span>`}</td>
+    <td>${x.sc?`${esc(x.sc.z)}<br><small>${esc(x.sc.v)}</small>`:''}</td>
+    <td>${esc(x.b.name)}<br><small>${esc(x.b.location)}</small></td><td>${dot(x.state)}${lab[x.state]}</td>
+    <td>${ago(x.s.last)}</td><td>${hrs(x.on)} / ${hrs(x.act)}</td><td>${actions(x)}</td></tr>`).join('')
+    ||'<tr><td colspan="7" class="mut">Nothing matches these filters.</td></tr>';
+}
+
+/* ---------- history, approve, delete ---------- */
+async function showHist(id){
+  const b=boards[id];if(!b)return;
+  const sc=SBY[b.census];
+  const s=await db.collection(`boards/${id}/days`).orderBy(firebase.firestore.FieldPath.documentId(),'desc').limit(7).get();
+  let h=`<b>${esc(sc?sc.n:'')} - ${esc(b.name)} (${esc(b.location)}), last 7 days</b><table><tr><th>Date</th><th>On</th><th>Active</th></tr>`;
+  s.forEach(d=>h+=`<tr><td>${esc(d.id)}</td><td>${hrs(d.data().onSeconds)}</td><td>${hrs(d.data().activeSeconds)}</td></tr>`);
+  $('hist').innerHTML=h+'</table>';$('hist').style.display='block';$('hist').scrollIntoView({behavior:'smooth'});
+}
+$('app').onclick=async e=>{
   try{
-    const ok=e.target.dataset.ok,del=e.target.dataset.del;
-    if(ok){await db.doc('boards/'+ok).update({approved:true});return;}
-    if(del){
-      if(confirm('Delete board "'+boards[del].name+'"?')){
-        await db.doc('boards/'+del).delete();
-        await rtdb.ref('status/'+del).remove();
+    const t=e.target,d=t.dataset;
+    if(d.ok){await db.doc('boards/'+d.ok).update({approved:true});return;}
+    if(d.del){
+      if(confirm('Delete board "'+boards[d.del].name+'"?')){
+        await db.doc('boards/'+d.del).delete();
+        await rtdb.ref('status/'+d.del).remove();
       }
       return;
     }
-    const tr=e.target.closest('tr');if(!tr)return;
-    const id=tr.dataset.id;
-    const s=await db.collection(`boards/${id}/days`).orderBy(firebase.firestore.FieldPath.documentId(),'desc').limit(7).get();
-    let h=`<b>${esc(boards[id].name)} - last 7 days</b><table><tr><th>Date</th><th>On</th><th>Active</th></tr>`;
-    s.forEach(d=>h+=`<tr><td>${esc(d.id)}</td><td>${hrs(d.data().onSeconds)}</td><td>${hrs(d.data().activeSeconds)}</td></tr>`);
-    $('hist').innerHTML=h+'</table>';$('hist').style.display='block';
+    if(d.hist){await showHist(d.hist);return;}
+    if(t.closest('button,input,select,label'))return;
+    const rs=t.closest('tr[data-school]');
+    if(rs){const c=rs.dataset.school;expanded.has(c)?expanded.delete(c):expanded.add(c);render();return;}
+    const rb=t.closest('tr[data-board]');
+    if(rb)await showHist(rb.dataset.board);
   }catch(err){fail(err);}
+};
+
+/* ---------- CSV export (current filters) ---------- */
+$('csv').onclick=()=>{
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const head=['Census','School','District','Zone','Division','Type','Medium','Board','Classroom','Status','Today on (h)','Today active (h)'];
+  const lines=[head.map(q).join(',')];
+  currentInfos().forEach(x=>{const s=x.sc||{};
+    lines.push([x.b.census,s.n,s.d,s.z,s.v,s.t,s.m,x.b.name,x.b.location,lab[x.state],(x.on/3600).toFixed(2),(x.act/3600).toFixed(2)].map(q).join(','));});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}));
+  a.download='smartboards-'+today()+'.csv';a.click();
 };
 </script></body></html>

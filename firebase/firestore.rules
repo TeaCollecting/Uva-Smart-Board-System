@@ -2,10 +2,18 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Admin: can approve / delete boards.
     function isAdmin() {
       return request.auth != null
         && request.auth.token.email == 'sudanchamalka@gmail.com'
         && request.auth.token.firebase.sign_in_provider == 'password';
+    }
+    // Staff: can view the dashboard (read only). To add an education officer:
+    // 1) create their user in Firebase Authentication > Users FIRST, 2) then add the email here.
+    function isStaff() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'password'
+        && request.auth.token.email in ['sudanchamalka@gmail.com'];
     }
     // A board's document id is its own auth uid
     function isBoard(id) {
@@ -16,14 +24,16 @@ service cloud.firestore {
     }
 
     match /boards/{id} {
-      allow read: if isAdmin() || isBoard(id);
+      allow read: if isStaff() || isBoard(id);
 
       allow create: if isBoard(id)
-        && request.resource.data.keys().hasOnly(['name', 'location', 'approved', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['name', 'location', 'census', 'approved', 'createdAt'])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60
         && request.resource.data.location is string
         && request.resource.data.location.size() > 0 && request.resource.data.location.size() <= 60
+        && request.resource.data.census is string
+        && request.resource.data.census.matches('[0-9]{3,6}')
         && request.resource.data.approved == false
         && request.resource.data.createdAt == request.time;
 
@@ -42,7 +52,7 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       match /days/{day} {
-        allow read: if isAdmin() || isBoard(id);
+        allow read: if isStaff() || isBoard(id);
         allow create, update: if isBoard(id) && isApproved(id)
           && day.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
           && request.resource.data.keys().hasOnly(['onSeconds', 'activeSeconds'])
@@ -59,7 +69,7 @@ service cloud.firestore {
       }
 
       match /logs/{log} {
-        allow read: if isAdmin();
+        allow read: if isStaff();
         allow create: if isBoard(id) && isApproved(id)
           && request.resource.data.keys().hasOnly(['type', 't'])
           && request.resource.data.type == 'start'

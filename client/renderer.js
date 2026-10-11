@@ -4,6 +4,7 @@ const _fb = require('firebase/compat/app');
 const firebase = _fb.default || _fb;
 require('firebase/compat/auth'); require('firebase/compat/firestore'); require('firebase/compat/database');
 firebase.initializeApp(require('./firebase-config.js'));
+const SCHOOLS = require('./schools.json'); // Uva Province school list (census 2024)
 
 const FLUSH_EVERY = 5; // minutes between Firestore writes (keeps you inside the free quota)
 const auth = firebase.auth(), db = firebase.firestore(), rtdb = firebase.database();
@@ -11,21 +12,44 @@ const TS = () => firebase.firestore.FieldValue.serverTimestamp();
 const $ = id => document.getElementById(id);
 const log = m => { $('info').textContent = m; };
 const today = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ---------- registration form: District > Zone > School ----------
+const uniq = a => [...new Set(a)].sort((x, y) => x.localeCompare(y));
+function fill(sel, items, placeholder) { // items: [value, text]
+  sel.innerHTML = '';
+  sel.appendChild(new Option(placeholder, ''));
+  items.forEach(([v, t]) => sel.appendChild(new Option(t, v)));
+}
+fill($('dist'), uniq(SCHOOLS.map(s => s.d)).map(d => [d, d]), 'Select district');
+fill($('zone'), [], 'Select zone');
+fill($('school'), [], 'Select school');
+$('dist').onchange = () => {
+  fill($('zone'), uniq(SCHOOLS.filter(s => s.d === $('dist').value).map(s => s.z)).map(z => [z, z]), 'Select zone');
+  fill($('school'), [], 'Select school');
+};
+$('zone').onchange = () => {
+  const list = SCHOOLS.filter(s => s.d === $('dist').value && s.z === $('zone').value)
+    .sort((a, b) => a.n.localeCompare(b.n));
+  fill($('school'), list.map(s => [s.c, `${s.n} (${s.c})`]), 'Select school');
+};
 
 let board = null;
 try { board = JSON.parse(localStorage.getItem('board') || 'null'); } catch (e) {}
-if (board && !board.email) board = null; // old registration format: register again
-if (board) start(board); else $('setup').style.display = 'block';
+if (board && !(board.email && board.census)) board = null; // old registration format: register again
+if (board) start(board);
+else { $('setup').style.display = 'block'; log('Register this Smart Board.'); ipcRenderer.send('show'); }
 
 $('reset').onclick = () => { localStorage.removeItem('board'); location.reload(); };
 
 $('save').onclick = () => {
-  const name = $('name').value.trim(), loc = $('loc').value.trim();
-  if (!name || !loc) return;
+  const census = $('school').value, name = $('name').value.trim(), loc = $('loc').value.trim();
+  if (!census || !name || !loc) { log('Select the school and fill in the board name and classroom.'); return; }
+  const sc = SCHOOLS.find(s => s.c === census);
   // Each board gets its own login, stored only on this PC. This keeps the same
   // uid after every restart (anonymous sign-in can lose it).
   board = {
-    name, loc,
+    name, loc, census, school: sc ? sc.n : census,
     email: 'board-' + crypto.randomBytes(6).toString('hex') + '@smartboard.local',
     pw: crypto.randomBytes(18).toString('base64')
   };
@@ -34,6 +58,7 @@ $('save').onclick = () => {
   start(board);
 };
 
+// ---------- connection ----------
 async function signIn(b) {
   try { return (await auth.signInWithEmailAndPassword(b.email, b.pw)).user; }
   catch (e) {
@@ -42,19 +67,33 @@ async function signIn(b) {
     return (await auth.createUserWithEmailAndPassword(b.email, b.pw)).user; // first run
   }
 }
+const isTransient = e => e && (e.code === 'auth/network-request-failed' || e.code === 'unavailable'
+  || /offline|network/i.test(e.message || ''));
 
 async function start(b) {
+  // At Windows start-up the network may not be ready yet: keep retrying quietly.
+  let ref, attempts = 0;
+  for (;;) {
+    try {
+      log(attempts ? `Connecting... (retry ${attempts})` : 'Connecting...');
+      const user = await signIn(b);
+      ref = db.collection('boards').doc(user.uid); // board id = auth uid
+      const snap = await ref.get();
+      if (!snap.exists) await ref.set({ name: b.name, location: b.loc, census: b.census, approved: false, createdAt: TS() });
+      break;
+    } catch (e) {
+      attempts++;
+      console.error(e);
+      log('Error: ' + (e.message || e));
+      if (!isTransient(e)) { ipcRenderer.send('show'); $('reset').style.display = 'block'; return; }
+      if (attempts >= 5) ipcRenderer.send('show'); // offline for a few minutes: let someone see it
+      await sleep(30000);
+    }
+  }
+
   try {
-    log('Connecting...');
-    const user = await signIn(b);
-    const id = user.uid;                       // board id = auth uid
-    const ref = db.collection('boards').doc(id);
-
-    const snap = await ref.get();
-    if (!snap.exists) await ref.set({ name: b.name, location: b.loc, approved: false, createdAt: TS() });
-
     // Online/Offline presence (server flips to offline automatically on disconnect)
-    const st = rtdb.ref('status/' + id);
+    const st = rtdb.ref('status/' + ref.id);
     const stamp = firebase.database.ServerValue.TIMESTAMP;
     rtdb.ref('.info/connected').on('value', s => {
       if (s.val()) st.onDisconnect().set({ state: 'offline', last: stamp })
@@ -68,10 +107,11 @@ async function start(b) {
         approved = false;
         log('This board was removed by the admin.\nClick "Reset registration" to register again.');
         $('reset').style.display = 'block';
+        ipcRenderer.send('show');
         return;
       }
       approved = !!s.data().approved;
-      log(`${b.name} (${b.loc})\n` + (approved ? 'Approved. Tracking active.' : 'Waiting for admin approval...'));
+      log(`${b.school || ''}\n${b.name} (${b.loc})\n` + (approved ? 'Approved. Tracking active.' : 'Waiting for admin approval...'));
       if (approved && !started) {
         started = true;
         ref.collection('logs').add({ type: 'start', t: TS() }).catch(console.error);
@@ -108,6 +148,7 @@ async function start(b) {
   } catch (e) {
     console.error(e);
     log('Error: ' + (e.message || e));
+    ipcRenderer.send('show');
     $('reset').style.display = 'block';
   }
 }
