@@ -1,8 +1,8 @@
 const { ipcRenderer } = require('electron');
 const crypto = require('crypto');
-const _fb = require('firebase/compat/app');
-const firebase = _fb.default || _fb;
-require('firebase/compat/auth'); require('firebase/compat/firestore'); require('firebase/compat/database');
+// Firebase is loaded as browser bundles by index.html (the Node build of firebase/auth
+// crashes inside Electron with "INTERNAL ASSERTION FAILED: Expected a class definition").
+const firebase = window.firebase;
 firebase.initializeApp(require('./firebase-config.js'));
 const SCHOOLS = require('./schools.json'); // Uva Province school list (census 2024)
 
