@@ -13,4 +13,11 @@ pre{white-space:pre-wrap}</style></head>
 </div>
 <pre id="info">Starting...</pre>
 <button id="reset" style="display:none">Reset registration</button>
+<script>/* hide CommonJS so the Firebase browser bundles register the global "firebase" */
+window.__m = window.module; window.__e = window.exports; window.module = undefined; window.exports = undefined;</script>
+<script src="node_modules/firebase/firebase-app-compat.js"></script>
+<script src="node_modules/firebase/firebase-auth-compat.js"></script>
+<script src="node_modules/firebase/firebase-firestore-compat.js"></script>
+<script src="node_modules/firebase/firebase-database-compat.js"></script>
+<script>window.module = window.__m; window.exports = window.__e;</script>
 <script src="renderer.js"></script></body></html>
