@@ -32,6 +32,16 @@ small,.mut{color:#64748b}
 #msg{color:#dc2626;min-height:1em}
 #hint{background:#dbeafe;border-radius:8px;padding:8px;margin:6px 0}
 #hist{margin-top:16px;padding:12px;background:#fff;border-radius:10px}
+#pm{position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:2000;display:flex;align-items:center;justify-content:center;padding:8px}
+#pm[hidden]{display:none}
+#pm .box{background:#fff;border-radius:12px;width:min(900px,100%);max-height:100%;overflow:auto;padding:12px}
+#pm .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+#pm .row input{flex:1 1 220px;min-width:0}
+#pmap{height:min(50vh,440px);border-radius:10px;margin:8px 0}
+#pres{display:flex;flex-direction:column;gap:4px;margin:4px 0;font-size:13px}
+#pres button{text-align:left;white-space:normal}
+#pmsg{color:#dc2626;min-height:1em;margin:2px 0}
+button:disabled{opacity:.5;cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -82,6 +92,28 @@ small,.mut{color:#64748b}
   <div id="hist" hidden></div>
 </div>
 
+<div id="pm" hidden>
+  <div class="box">
+    <div class="row" style="justify-content:space-between"><b id="ptitle"></b><button class="sm gray" id="pclose">✕ වසන්න</button></div>
+    <small id="pinfo"></small>
+    <div class="row" style="margin-top:6px">
+      <input id="pq" placeholder="පාසල / ගම සොයන්න (උදා: Kethsirigama Thanamalwila)">
+      <button id="pgo">සොයන්න</button>
+    </div>
+    <div id="pres"></div>
+    <div class="row">
+      <input id="ppaste" placeholder="Google Maps link හෝ coordinates paste කරන්න (6.97, 81.05)">
+      <button class="gray" id="ppasteb">යොදන්න</button>
+      <button class="gray" id="pme">📍 මගේ ස්ථානය</button>
+    </div>
+    <div id="pmap"></div>
+    <div id="pmsg"></div>
+    <div class="row" style="justify-content:space-between">
+      <span>තෝරාගත් ස්ථානය: <b id="pcoord">-</b> <small>(සිතියම ක්ලික් කරන්න, නැතහොත් pin එක ඇදගෙන යන්න)</small></span>
+      <span><button id="psave" disabled>සුරකින්න</button> <button id="psnext" class="gray" disabled>සුරකින්න සහ ඊළඟ බෝඩ් එක</button></span>
+    </div>
+  </div>
+</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -125,6 +157,107 @@ auth.onAuthStateChanged(u=>{
 });
 setInterval(()=>{if(!$('app').hidden)render();},60000); // idle/active changes with time
 
+/* ---------- school location picker ---------- */
+let pmap,pmark,pref,pid=null,pcur=null;
+const inSL=(a,b)=>a>=5.5&&a<=10&&b>=79.3&&b<=82.2; // same limits as firestore.rules validGeo
+const cleanName=n=>String(n||'').replace(/\b(M\.?M\.?V|M\.?V|K\.?V|J\.?V|C\.?C|P\.?S|T\.?V|MAHA VIDYALAYA|VIDYALAYA|NATIONAL SCHOOL|CENTRAL COLLEGE|COLLEGE)\b\.?/gi,' ').replace(/\s+/g,' ').trim();
+function initPicker(){
+  if(pmap)return;
+  const osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+  const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
+  pmap=L.map('pmap',{layers:[osm]}).setView([6.95,81.1],9);
+  L.control.layers({'සිතියම':osm,'චන්ද්‍රිකා (Satellite)':sat}).addTo(pmap);
+  pref=L.layerGroup().addTo(pmap);
+  pmap.on('click',e=>setPin(e.latlng.lat,e.latlng.lng,false));
+}
+function setPin(lat,lng,fly,zoom){
+  lat=+(+lat).toFixed(5);lng=+(+lng).toFixed(5);
+  if(!isFinite(lat)||!isFinite(lng)||!inSL(lat,lng)){$('pmsg').textContent='මෙම ස්ථානය ශ්‍රී ලංකාවෙන් පිටත ය.';return;}
+  $('pmsg').textContent='';pcur={lat,lng};
+  if(!pmark){
+    pmark=L.marker([lat,lng],{draggable:true}).addTo(pmap);
+    pmark.on('dragend',()=>{const q=pmark.getLatLng();setPin(q.lat,q.lng,false);});
+  }else pmark.setLatLng([lat,lng]);
+  if(fly)pmap.setView([lat,lng],zoom||17);
+  $('pcoord').textContent=lat+', '+lng;
+  $('psave').disabled=$('psnext').disabled=false;
+}
+function parseLL(t){
+  try{t=decodeURIComponent(String(t).trim());}catch(e){t=String(t).trim();}
+  const m=t.match(/@(-?\d+\.\d+),\s*(-?\d+\.\d+)/)||t.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/)
+    ||t.match(/[?&](?:q|ll|query|destination)=(-?\d+\.\d+)[, ]+(-?\d+\.\d+)/)||t.match(/^(-?\d+\.\d+)\s*[, ]\s*(-?\d+\.\d+)$/);
+  return m?[+m[1],+m[2]]:null;
+}
+async function pSearch(qs){
+  qs=qs||[$('pq').value.trim()];const box=$('pres');
+  box.textContent='සොයමින්...';
+  try{
+    for(const q of qs.filter(Boolean)){
+      const r=await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=8&countrycodes=lk&accept-language=en&viewbox=80.3,7.6,81.7,6.2&q='+encodeURIComponent(q));
+      const a=await r.json();
+      if(!a.length)continue;
+      box.textContent='';
+      a.forEach(x=>{
+        const b=document.createElement('button');b.className='sm gray';
+        b.textContent='📍 '+x.display_name;b.dataset.ll=x.lat+','+x.lon;box.appendChild(b);
+      });
+      return;
+    }
+    box.textContent='සොයාගත නොහැකි විය. නම/ගම වෙනස් කර නැවත සොයන්න (OSM හි නැති පාසල් බොහොමයක් ඇත) — නැතහොත් Google Maps හි සොයා ලැබෙන link/coordinates පහත paste කරන්න, හෝ Satellite දර්ශනයෙන් පාසල් ගොඩනැගිල්ල බලා ක්ලික් කරන්න.';
+  }catch(e){box.textContent='සෙවීම අසාර්ථකයි: '+e.message;}
+}
+function openPlacer(id){
+  if(typeof L==='undefined'){$('msg').textContent='සිතියම පූරණය වී නැත.';return;}
+  const b=boards[id];if(!b)return;
+  pid=id;pcur=null;$('pm').hidden=false;initPicker();
+  if(pmark){pmap.removeLayer(pmark);pmark=null;}
+  $('psave').disabled=$('psnext').disabled=true;
+  $('pcoord').textContent='-';$('pmsg').textContent='';$('pres').textContent='';$('ppaste').value='';
+  const sc=SBY[b.census];
+  $('ptitle').textContent=(sc?sc.n:b.census)+' — '+b.name;
+  $('pinfo').textContent=sc?`${sc.a} · ${sc.z} කලාපය · ${sc.v} කොට්ඨාසය · ${sc.d} · census ${sc.c}`:'';
+  const cn=sc?cleanName(sc.n):'';
+  $('pq').value=sc?`${cn} ${sc.z}`:'';
+  // grey dots = boards already placed in the same zone (helps to find the area)
+  pref.clearLayers();const near=[];
+  Object.keys(boards).forEach(k=>{
+    const o=boards[k],os=SBY[o.census];
+    if(k===id||!o.geo||!sc||!os||os.z!==sc.z)return;
+    near.push([o.geo.lat,o.geo.lng]);
+    L.circleMarker([o.geo.lat,o.geo.lng],{radius:5,color:'#64748b',fillOpacity:.6}).bindTooltip(os.n).addTo(pref);
+  });
+  setTimeout(()=>{
+    pmap.invalidateSize();
+    if(b.geo)setPin(b.geo.lat,b.geo.lng,true,16);
+    else{
+      if(near.length)pmap.fitBounds(near,{maxZoom:12,padding:[30,30]});else pmap.setView([6.95,81.1],9);
+      if(sc)pSearch([`${cn} ${sc.z}`,cn,sc.n]);
+    }
+  },60);
+}
+function closePlacer(){$('pm').hidden=true;pid=null;}
+async function pSave(next){
+  if(!pcur||!pid)return;
+  const id=pid;
+  try{await db.doc('boards/'+id).update({geo:{lat:pcur.lat,lng:pcur.lng,acc:0}});}
+  catch(err){$('pmsg').textContent=/permission/i.test(err.message)?'මෙම ක්‍රියාවට ඔබට අවසර නැත.':err.message;return;}
+  if(next){const n=currentInfos().find(x=>x.id!==id&&!x.b.geo);if(n){openPlacer(n.id);return;}}
+  closePlacer();
+}
+$('pclose').onclick=closePlacer;
+$('pm').onclick=e=>{if(e.target===$('pm'))closePlacer();};
+$('pgo').onclick=()=>pSearch();
+$('pq').onkeydown=e=>{if(e.key==='Enter')pSearch();};
+$('pres').onclick=e=>{const b=e.target.closest('button[data-ll]');if(!b)return;const [a,o]=b.dataset.ll.split(',');setPin(a,o,true,17);};
+$('ppasteb').onclick=()=>{const v=parseLL($('ppaste').value);if(!v){$('pmsg').textContent='Coordinates හඳුනාගත නොහැක. Google Maps link එක browser address bar එකෙන් copy කරන්න (short link වැඩ නැත), හෝ "6.97, 81.05" ලෙස ලියන්න.';return;}setPin(v[0],v[1],true,17);};
+$('pme').onclick=()=>{
+  if(!navigator.geolocation){$('pmsg').textContent='මෙම උපාංගයේ location සහාය නැත.';return;}
+  navigator.geolocation.getCurrentPosition(q=>setPin(q.coords.latitude,q.coords.longitude,true,18),()=>{$('pmsg').textContent='Location ලබාගත නොහැකි විය.';},{timeout:10000});
+};
+$('psave').onclick=()=>pSave(false);
+$('psnext').onclick=()=>pSave(true);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('pm').hidden)closePlacer();});
+
 /* ---------- map ---------- */
 function initMap(){
   if(map){map.invalidateSize();return;}
@@ -147,7 +280,7 @@ function drawMap(list,fit){
       .bindPopup(`<b>${esc(x.sc?x.sc.n:'')}</b><br>${esc(x.b.name)} (${esc(x.b.location)})<br>${lab[x.state]}<br>${g.acc?'±'+g.acc+'m':'අතින් සලකුණු කළා'}`).addTo(layer);
   });
   const n=list.filter(x=>!x.b.geo).length;
-  $('nogeo').textContent=n?`ස්ථානය නැති බෝඩ් ${n}ක් ඇත. පේළියේ "ස්ථානය" බොත්තමෙන් සිතියමේ සලකුණු කරන්න.`:'';
+  $('nogeo').innerHTML=n?`ස්ථානය නැති බෝඩ් ${n}ක් ඇත. <button class="sm" data-nextgeo="1">ස්ථානය සලකුණු කිරීම අරඹන්න</button>`:'';
   if(fit&&pts.length)map.fitBounds(pts,{maxZoom:13,padding:[30,30]});
 }
 
@@ -279,10 +412,8 @@ $('app').onclick=async e=>{
       return;
     }
     if(d.hist){await showHist(d.hist);return;}
-    if(d.geo){
-      if(!map){$('msg').textContent='සිතියම පූරණය වී නැත.';return;}
-      placing=d.geo;$('hint').hidden=false;$('map').scrollIntoView({behavior:'smooth'});return;
-    }
+    if(d.geo){openPlacer(d.geo);return;}
+    if(d.nextgeo){const n=currentInfos().find(x=>!x.b.geo);if(n)openPlacer(n.id);return;}
     if(t.closest('button,input,select,label,summary'))return;
     const rs=t.closest('tr[data-school]');
     if(rs){const c=rs.dataset.school;expanded.has(c)?expanded.delete(c):expanded.add(c);render();return;}
