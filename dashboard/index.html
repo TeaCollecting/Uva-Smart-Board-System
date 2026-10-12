@@ -3,51 +3,97 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ඌව පලාත් Smart Board නිරීක්ෂණය</title>
+<title>USBTS — Uva Smartboard Tracking System</title>
+<meta name="theme-color" content="#7a1426">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <style>
-#map{height:340px;border-radius:10px;margin:8px 0}
-body{font-family:system-ui,'Noto Sans Sinhala',sans-serif;margin:0;padding:12px;background:#f1f5f9;color:#0f172a;max-width:1250px;margin-inline:auto}
-input,select,button{padding:9px;border-radius:8px;border:1px solid #cbd5e1;font-size:15px;margin:3px 0;background:#fff;color:#0f172a}
-button{background:#2563eb;color:#fff;border:0;cursor:pointer}
-button.gray{background:#64748b}button.sm{padding:5px 8px;font-size:13px}button.red{background:#dc2626}
-.top{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+:root{--bg:#ffffff;--card:#ffffff;--ink:#2a1215;--mut:#7a6468;--line:#ecdcc8;--soft:#fff7dc;--blue:#7a1426;--teal:#7a1426;--green:#fbbf24;
+--grad:linear-gradient(135deg,#5e0f1d 0%,#7a1426 55%,#9b1c33 100%);--grad2:linear-gradient(90deg,#7a1426,#fbbf24);--shadow:0 6px 22px rgba(122,20,38,.12)}
+:root[data-theme=dark]{--bg:#1b0b0f;--card:#2a1218;--ink:#fdf3e4;--mut:#d6bcb2;--line:#4d2430;--soft:#361a22;--teal:#fbbf24;--blue:#fbbf24;--shadow:0 6px 22px rgba(0,0,0,.45)}
+*{-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+body{font-family:system-ui,'Noto Sans Sinhala',sans-serif;margin:0 auto;padding:14px;max-width:1250px;color:var(--ink);min-height:100vh;
+background:var(--bg);transition:background .3s,color .3s}
+input,select,button{padding:10px 12px;border-radius:10px;border:1.5px solid var(--line);font-size:15px;margin:3px 0;background:var(--card);color:var(--ink);font-family:inherit;transition:border-color .15s,box-shadow .15s,transform .12s,filter .15s}
+input:focus,select:focus{outline:0;border-color:var(--teal);box-shadow:0 0 0 3px rgba(251,191,36,.5)}
+button{background:var(--grad);color:#fff;border:0;cursor:pointer;font-weight:600;box-shadow:0 3px 10px rgba(122,20,38,.3)}
+button:hover{transform:translateY(-1px);filter:brightness(1.08)}button:active{transform:translateY(0) scale(.97)}
+button.gray{background:linear-gradient(135deg,#64748b,#475569);box-shadow:none}
+button.red{background:linear-gradient(135deg,#ef4444,#dc2626);box-shadow:none}
+button.sm{padding:5px 10px;font-size:13px;border-radius:8px}
+button:disabled{opacity:.5;cursor:not-allowed;transform:none;filter:none}
+#login{position:relative;overflow:hidden;max-width:360px;margin:12vh auto 0;padding:30px 26px 24px;background:var(--card);border-radius:20px;box-shadow:var(--shadow);text-align:center;animation:pop .45s ease}
+#login::before{content:'';position:absolute;inset:0 0 auto 0;height:7px;background:var(--grad2)}
+#login h3{margin:6px 0 14px;font-size:20px}
+#login input,#login button{width:100%;box-sizing:border-box}
+#login button{margin-top:10px;padding:12px}
+#app{animation:fade .5s ease}
+.top{border-bottom:5px solid #fbbf24;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;background:var(--grad);color:#fff;padding:14px 18px;border-radius:18px;box-shadow:var(--shadow);margin-bottom:12px}
+.top h3{margin:0;font-size:20px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.25)}
+.top button{background:rgba(251,191,36,.18);color:#fde68a;border:1px solid rgba(251,191,36,.7);box-shadow:none;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.top button:hover{background:#fbbf24;color:#5e0f1d}
 .filters{display:flex;flex-wrap:wrap;gap:8px}.filters select,.filters input{flex:1 1 150px;min-width:0}
-details{margin:6px 0}summary{cursor:pointer;color:#475569;font-size:14px}
-.stats{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
-.stat{flex:1 1 110px;background:#fff;border-radius:10px;padding:10px;text-align:center;font-size:13px;color:#475569}
-.stat b{display:block;font-size:22px;color:#0f172a}
-.tabs{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
-.tabs button[aria-pressed=false]{background:#e2e8f0;color:#0f172a}
-.wrap{overflow-x:auto}
-table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;font-size:14px}
-th,td{padding:8px;text-align:left;border-bottom:1px solid #e2e8f0;vertical-align:top}
-th{color:#64748b;font-weight:600;white-space:nowrap}
-tr.row,tr.brow{cursor:pointer}tr.row:hover,tr.brow:hover{background:#f8fafc}
-tr.sub>td{padding:0 0 8px 24px;background:#f8fafc}table.inner{border-radius:0}
-small,.mut{color:#64748b}
+details{margin:6px 0}summary{cursor:pointer;color:var(--teal);font-size:14px;font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:10px;margin:12px 0}
+.stat{--accent:var(--blue);background:var(--card);border-radius:14px;padding:12px 8px;text-align:center;font-size:13px;color:var(--mut);box-shadow:var(--shadow);border-top:4px solid var(--accent);transition:transform .15s,box-shadow .15s,background .15s}
+.stat:nth-child(2){--accent:#fbbf24}.stat:last-child{--accent:#fbbf24}
+.stat[data-st=on]{--accent:#16a34a}.stat[data-st=idle]{--accent:#d97706}.stat[data-st=off]{--accent:#dc2626}.stat[data-st=pending]{--accent:#64748b}
+.stat[data-st]{cursor:pointer}.stat[data-st]:hover{transform:translateY(-4px);box-shadow:0 10px 26px rgba(251,191,36,.5)}
+.stat.sel{background:var(--soft);box-shadow:0 0 0 2px var(--accent),var(--shadow)}
+.stat b{display:block;font-size:26px;color:var(--ink)}
+#map{height:340px;border-radius:16px;margin:8px 0;box-shadow:var(--shadow);border:2px solid var(--line)}
+:root[data-theme=dark] #map .leaflet-tile-pane{filter:brightness(.78) contrast(1.1) saturate(.85)}
+#nogeo{display:block;margin:4px 0 8px}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+.tabs button[aria-pressed=false]{background:var(--card);color:var(--teal);border:1.5px solid var(--line);box-shadow:none}
+.tabs button[aria-pressed=false]:hover{border-color:var(--teal)}
+.tabs label{color:var(--mut);font-size:14px;cursor:pointer}
+.wrap{overflow-x:auto;border-radius:16px;box-shadow:var(--shadow);background:var(--card)}
+table{width:100%;border-collapse:collapse;background:var(--card);font-size:14px}
+th,td{padding:10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--teal);background:var(--soft);font-weight:700;white-space:nowrap}
+tr.row,tr.brow{cursor:pointer;transition:background .15s}
+tr.row:hover,tr.brow:hover{background:linear-gradient(90deg,rgba(251,191,36,.22),rgba(251,191,36,.08))}
+tr.sub>td{padding:0 0 8px 24px;background:var(--soft)}table.inner{border-radius:0}
+small,.mut{color:var(--mut)}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
-.d-on{background:#16a34a}.d-idle{background:#d97706}.d-off{background:#dc2626}.d-pending{background:#64748b}.d-none{background:#cbd5e1}
-.on{color:#16a34a;font-weight:600}.idle{color:#d97706;font-weight:600}.off{color:#dc2626;font-weight:600}.pending{color:#64748b;font-weight:600}
-#msg{color:#dc2626;min-height:1em}
-#hint{background:#dbeafe;border-radius:8px;padding:8px;margin:6px 0}
-#hist{margin-top:16px;padding:12px;background:#fff;border-radius:10px}
-#pm{position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:2000;display:flex;align-items:center;justify-content:center;padding:8px}
-#pm[hidden]{display:none}
-#pm .box{background:#fff;border-radius:12px;width:min(900px,100%);max-height:100%;overflow:auto;padding:12px}
+.d-on{background:#16a34a;animation:pulse 1.8s infinite}.d-idle{background:#d97706}.d-off{background:#dc2626}.d-pending{background:#64748b}.d-none{background:#cbd5e1}
+.on{color:#16a34a;font-weight:600}.idle{color:#d97706;font-weight:600}.off{color:#dc2626;font-weight:600}.pending{color:var(--mut);font-weight:600}
+#msg{color:#dc2626;min-height:1em;margin:0 0 6px;font-weight:600}
+#hint{background:#fff2c2;color:#5e0f1d;border-left:5px solid #fbbf24;border-radius:10px;padding:9px 12px;margin:6px 0}
+#hist{margin-top:16px;padding:14px;background:var(--card);border-radius:16px;box-shadow:var(--shadow);animation:pop .3s ease}
+#pm{position:fixed;inset:0;background:rgba(8,28,44,.62);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);z-index:2000;display:flex;align-items:center;justify-content:center;padding:8px}
+#pm .box{background:var(--card);border-radius:18px;width:min(900px,100%);max-height:100%;overflow:auto;padding:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);animation:pop .25s ease;border-top:6px solid transparent;border-image:var(--grad2) 1}
 #pm .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 #pm .row input{flex:1 1 220px;min-width:0}
-#pmap{height:min(50vh,440px);border-radius:10px;margin:8px 0}
-#pres{display:flex;flex-direction:column;gap:4px;margin:4px 0;font-size:13px}
-#pres button{text-align:left;white-space:normal}
+#pmap{height:min(50vh,440px);border-radius:12px;margin:8px 0;border:2px solid var(--line)}
+#pres{display:flex;flex-direction:column;gap:4px;margin:4px 0;font-size:13px;max-height:160px;overflow:auto}
+#pres button{text-align:left;white-space:normal;font-weight:500}
 #pmsg{color:#dc2626;min-height:1em;margin:2px 0}
-button:disabled{opacity:.5;cursor:not-allowed}
+.logo{height:52px;width:52px;border-radius:50%;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);flex:none}
+.brand{display:flex;align-items:center;gap:12px}
+.brand small{display:block;color:#fde68a;font-size:12px;font-weight:400}
+#login .logo{height:120px;width:120px;margin:0 auto 6px;display:block;background:none;box-shadow:none;border-radius:0}
+#rep{background:var(--card);border-radius:16px;padding:10px 14px;box-shadow:var(--shadow);margin:12px 0}
+#rep .filters label{display:flex;gap:6px;align-items:center;flex:1 1 170px;color:var(--mut);font-size:14px}
+#rep .filters label input{flex:1;min-width:0}
+#rep .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+#rep .acts button:disabled{background:var(--line);color:var(--mut);box-shadow:none}
+#rstat{display:block;min-height:1.2em}
+@keyframes pop{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(22,163,74,.6)}100%{box-shadow:0 0 0 8px rgba(22,163,74,0)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 <p id="msg"></p>
 <div id="login">
-  <h3>පරිපාලක පිවිසුම</h3>
+  <img class="logo" src="logo-256.png" alt="USBTS"><h3>USBTS</h3><small>Uva Smartboard Tracking System</small><p style="margin:8px 0 0">🔐 පරිපාලක පිවිසුම</p>
   <input id="em" type="email" placeholder="Email"><br>
   <input id="pw" type="password" placeholder="Password"><br>
   <button id="go">Login</button>
@@ -55,8 +101,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
 
 <div id="app" hidden>
   <div class="top">
-    <h3>ඌව පලාත් Smart Board නිරීක්ෂණය</h3>
-    <span><button id="csv" class="sm">CSV</button> <button id="out" class="sm gray">ඉවත් වන්න</button></span>
+    <div class="brand"><img class="logo" src="logo-128.png" alt="USBTS"><h3>USBTS<small>Uva Smartboard Tracking System · ඌව පලාත් Smart Board නිරීක්ෂණය</small></h3></div>
+    <span><button id="theme" class="sm" title="Light / Dark">🌓</button> <button id="csv" class="sm">CSV</button> <button id="out" class="sm gray">ඉවත් වන්න</button></span>
   </div>
 
   <div class="filters">
@@ -80,6 +126,21 @@ button:disabled{opacity:.5;cursor:not-allowed}
   <div id="hint" hidden>සිතියමේ බෝඩ් එක ඇති ස්ථානය ක්ලික් කරන්න.</div>
   <div id="map"></div>
   <small id="nogeo"></small>
+
+  <details id="rep">
+    <summary>📊 වාර්තා (Reports) — දිනපතා · සතිපතා · මාසික · වාර්ෂික → PDF / Excel / CSV</summary>
+    <div class="filters" style="margin-top:8px">
+      <select id="rtype"><option value="day">දිනපතා (Daily)</option><option value="week">සතිපතා (Weekly)</option><option value="month">මාසික (Monthly)</option><option value="year">වාර්ෂික (Annual)</option></select>
+      <label>From <input type="date" id="rfrom"></label>
+      <label>To <input type="date" id="rto"></label>
+    </div>
+    <small id="rscope"></small>
+    <div class="acts">
+      <button id="rload">1. දත්ත ලබාගන්න</button>
+      <button id="rcsv" disabled>CSV</button><button id="rxls" disabled>Excel</button><button id="rpdf" disabled>PDF</button>
+    </div>
+    <small id="rstat">ඉහත ෆිල්ටර් (දිස්ත්‍රික්කය, කලාපය ආදිය) අනුව පාසල් තෝරා, කාල පරාසය දී "දත්ත ලබාගන්න" ඔබන්න.</small>
+  </details>
 
   <div class="tabs">
     <button id="vb" aria-pressed="true">බෝඩ් අනුව</button>
@@ -115,6 +176,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
   </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -258,6 +320,162 @@ $('psave').onclick=()=>pSave(false);
 $('psnext').onclick=()=>pSave(true);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('pm').hidden)closePlacer();});
 
+/* ---------- reports: day / week / month / year -> CSV, Excel, PDF ---------- */
+const pad2=n=>String(n).padStart(2,'0');
+const ymd=d=>`${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+const pdate=k=>{const [y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d);};
+const weekStart=k=>{const d=pdate(k);d.setDate(d.getDate()-((d.getDay()+6)%7));return ymd(d);}; // Monday
+const pKey=(t,k)=>t==='day'?k:t==='week'?weekStart(k):t==='month'?k.slice(0,7):k.slice(0,4);
+const pLabel=(t,k)=>{if(t!=='week')return k;const e=pdate(k);e.setDate(e.getDate()+6);return k+' → '+ymd(e);};
+const TNAME={day:'Daily',week:'Weekly',month:'Monthly',year:'Annual'};
+const hm=m=>Math.floor(m/60)+'h '+pad2(m%60)+'m';
+let R=null;
+function repScope(infos){
+  const ap=infos.filter(x=>x.b.approved);
+  const sch=new Set(ap.map(x=>x.sc?x.sc.c:x.b.census));
+  $('rscope').textContent=`දැනට තෝරා ඇති ෆිල්ටර් අනුව: අනුමත බෝඩ් ${ap.length}ක් · පාසල් ${sch.size}ක් වාර්තාවට ඇතුළත් වේ. (ෆිල්ටර් වෙනස් කළොත් නැවත "දත්ත ලබාගන්න" ඔබන්න)`;
+}
+function repDefaults(){
+  const t=$('rtype').value,n=new Date(),f=new Date(n);
+  if(t==='day')f.setDate(n.getDate()-6);
+  else if(t==='week')f.setDate(n.getDate()-8*7+1);
+  else if(t==='month'){f.setDate(1);f.setMonth(n.getMonth()-5);}
+  else{f.setDate(1);f.setMonth(0);}
+  $('rfrom').value=ymd(f);$('rto').value=ymd(n);
+}
+function repReset(){R=null;['rcsv','rxls','rpdf'].forEach(i=>$(i).disabled=true);}
+$('rtype').onchange=()=>{repDefaults();repReset();};
+$('rfrom').onchange=$('rto').onchange=repReset;
+repDefaults();
+
+async function repLoad(){
+  const type=$('rtype').value,from=$('rfrom').value,to=$('rto').value;
+  if(!from||!to||from>to){$('rstat').textContent='දින පරාසය වැරදියි.';return;}
+  const infos=currentInfos().filter(x=>x.b.approved);
+  if(!infos.length){$('rstat').textContent='තෝරාගත් ෆිල්ටර් වලට අනුමත බෝඩ් නැත.';return;}
+  const dayCount=Math.round((pdate(to)-pdate(from))/864e5)+1;
+  if(infos.length*dayCount>30000&&!confirm(`Firestore කියවීම් උපරිම ${infos.length*dayCount} ක් විය හැක (නොමිලේ සීමාව දිනකට 50,000). දිස්ත්‍රික්කය/කලාපය අනුව ෆිල්ටර් කිරීම හෝ කාල පරාසය අඩු කිරීම වඩා හොඳයි. ඉදිරියට යමුද?`))return;
+  repReset();$('rload').disabled=true;
+  try{
+    const FP=firebase.firestore.FieldPath.documentId(),res={};let done=0;
+    const queue=infos.slice();
+    const one=async x=>{
+      const s=await db.collection('boards/'+x.id+'/days').where(FP,'>=',from).where(FP,'<=',to).get();
+      res[x.id]=s.docs.map(d=>({k:d.id,on:Math.round((d.data().onSeconds||0)/60),act:Math.round((d.data().activeSeconds||0)/60)}));
+      $('rstat').textContent=`දත්ත ලබාගනිමින්... ${++done}/${infos.length}`;
+    };
+    await Promise.all(Array.from({length:6},async()=>{while(queue.length)await one(queue.shift());}));
+    // periods in range
+    const periods=[];for(let d=pdate(from);ymd(d)<=to;d.setDate(d.getDate()+1)){const k=pKey(type,ymd(d));if(periods[periods.length-1]!==k)periods.push(k);}
+    // aggregate: school x period, board x period
+    const sm={},bm=[];
+    const sinfo={};
+    infos.forEach(x=>{
+      const c=x.sc?x.sc.c:x.b.census;
+      sinfo[c]=sinfo[c]||{c,n:x.sc?x.sc.n:c,d:x.sc?x.sc.d:'',z:x.sc?x.sc.z:'',v:x.sc?x.sc.v:'',boards:0};
+      sinfo[c].boards++;
+      const per={};
+      (res[x.id]||[]).forEach(r=>{
+        const k=pKey(type,r.k),p=per[k]=per[k]||{on:0,act:0,days:new Set()};
+        p.on+=r.on;p.act+=r.act;if(r.on>0)p.days.add(r.k);
+        const q=sm[c+'|'+k]=sm[c+'|'+k]||{on:0,act:0,days:new Set()};
+        q.on+=r.on;q.act+=r.act;if(r.on>0)q.days.add(r.k);
+      });
+      Object.keys(per).sort().forEach(k=>bm.push({k,c,school:sinfo[c].n,board:x.b.name,room:x.b.location,days:per[k].days.size,on:per[k].on,act:per[k].act}));
+    });
+    const schools=Object.values(sinfo).sort((a,b)=>a.n.localeCompare(b.n));
+    const pc=(a,o)=>o?Math.round(a*1000/o)/10:0;
+    const detail=[],summary=[];
+    schools.forEach(s=>{
+      let T={on:0,act:0,days:new Set()};
+      periods.forEach(k=>{
+        const q=sm[s.c+'|'+k]||{on:0,act:0,days:new Set()};
+        T.on+=q.on;T.act+=q.act;q.days.forEach(d=>T.days.add(d));
+        detail.push({period:pLabel(type,k),c:s.c,school:s.n,d:s.d,z:s.z,v:s.v,boards:s.boards,days:q.days.size,on:q.on,act:q.act,pct:pc(q.act,q.on)});
+      });
+      summary.push({c:s.c,school:s.n,d:s.d,z:s.z,v:s.v,boards:s.boards,days:T.days.size,on:T.on,act:T.act,pct:pc(T.act,T.on)});
+    });
+    R={type,from,to,detail,summary,boards:bm,boardCount:infos.length,generated:new Date().toLocaleString(),
+       scope:(F.d||'සියලු දිස්ත්‍රික්ක')+' / '+(F.z||'සියලු කලාප')+(F.v?' / '+F.v:'')};
+    ['rcsv','rxls','rpdf'].forEach(i=>$(i).disabled=false);
+    $('rstat').textContent=`සූදානම්: පාසල් ${schools.length}ක්, බෝඩ් ${infos.length}ක්, ${TNAME[type]} කාල පරිච්ඡේද ${periods.length}ක් (පේළි ${detail.length}).`;
+  }catch(err){fail(err);$('rstat').textContent='දත්ත ලබාගැනීම අසාර්ථකයි: '+err.message;}
+  $('rload').disabled=false;
+}
+const fname=ext=>`USBTS_${TNAME[R.type]}_${R.from}_to_${R.to}.${ext}`;
+const csvq=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+const saveBlob=(blob,name)=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);};
+const HEAD=['Period','Census','School','District','Zone','Division','Boards','Days with data','Powered ON (min)','In use (min)','Usage %'];
+const drow=r=>[r.period,r.c,r.school,r.d,r.z,r.v,r.boards,r.days,r.on,r.act,r.pct];
+function repCSV(){
+  const lines=[HEAD,...R.detail.map(drow)].map(r=>r.map(csvq).join(','));
+  saveBlob(new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}),fname('csv'));
+}
+function repXLS(){
+  if(typeof XLSX==='undefined'){fail(new Error('Excel library පූරණය වී නැත (internet පරීක්ෂා කරන්න).'));return;}
+  const wb=XLSX.utils.book_new();
+  const add=(name,aoa,w)=>{const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=w.map(x=>({wch:x}));XLSX.utils.book_append_sheet(wb,ws,name);};
+  add('Info',[['USBTS — Uva Smartboard Tracking System'],['Report',TNAME[R.type]+' usage report'],['From',R.from],['To',R.to],['Scope',R.scope],['Approved boards',R.boardCount],['Generated',R.generated],
+    ['Note','Powered ON = minutes the board PC was on; In use = minutes with touch/mouse/keyboard activity; Usage % = In use / Powered ON. Weeks start on Monday (first/last week may be partial).']],[18,90]);
+  add('Summary',[['Census','School','District','Zone','Division','Boards','Days with data','Powered ON (min)','In use (min)','Usage %'],
+    ...R.summary.map(r=>[r.c,r.school,r.d,r.z,r.v,r.boards,r.days,r.on,r.act,r.pct])],[9,38,14,16,18,8,14,16,12,9]);
+  add('Detail',[HEAD,...R.detail.map(drow)],[24,9,38,14,16,18,8,14,16,12,9]);
+  add('Boards',[['Period','Census','School','Board','Classroom','Days with data','Powered ON (min)','In use (min)'],
+    ...R.boards.map(r=>[pLabel(R.type,r.k),r.c,r.school,r.board,r.room,r.days,r.on,r.act])],[24,9,38,16,18,14,16,12]);
+  XLSX.writeFile(wb,fname('xlsx'));
+}
+function repPDF(){
+  if(R.detail.length>5000){alert('PDF සඳහා පේළි '+R.detail.length+'ක් වැඩියි (උපරිම 5000). කාල පරාසය හෝ ෆිල්ටර් අඩු කරන්න, නැතහොත් Excel / CSV භාවිතා කරන්න.');return;}
+  const w=window.open('','_blank');
+  if(!w){fail(new Error('Pop-up අවහිර වී ඇත. මෙම අඩවියට pop-up වලට ඉඩ දී නැවත උත්සාහ කරන්න.'));return;}
+  const logo=new URL('logo-256.png',location.href).href;
+  const tr=(a,h)=>'<tr>'+a.map(v=>`<${h?'th':'td'}>${esc(v)}</${h?'th':'td'}>`).join('')+'</tr>';
+  const sumRows=R.summary.map(r=>tr([r.school+' ('+r.c+')',r.z,r.boards,r.days,hm(r.on),hm(r.act),r.pct+'%'])).join('');
+  const detRows=R.detail.map(r=>tr([r.period,r.school+' ('+r.c+')',r.boards,r.days,hm(r.on),hm(r.act),r.pct+'%'])).join('');
+  const tot=R.summary.reduce((a,r)=>(a.on+=r.on,a.act+=r.act,a),{on:0,act:0});
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(fname('pdf'))}</title>
+<link rel="icon" href="${new URL('favicon-32.png',location.href).href}">
+<style>
+@page{size:A4 landscape;margin:12mm}
+body{font-family:system-ui,'Noto Sans Sinhala',sans-serif;color:#0f172a;margin:0;font-size:11px}
+.hd{display:flex;align-items:center;gap:14px;padding:12px 16px;border-radius:12px;color:#fff;background:linear-gradient(135deg,#5e0f1d,#7a1426 60%,#9b1c33);border-bottom:5px solid #fbbf24;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.hd img{height:70px;width:70px;background:#fff;border-radius:50%}.hd h1{margin:0;font-size:20px}.hd p{margin:2px 0 0;font-size:12px;opacity:.95}
+.meta{margin:10px 0;display:flex;flex-wrap:wrap;gap:6px 22px;font-size:12px}.meta b{color:#7a1426}
+h2{font-size:14px;color:#7a1426;margin:14px 0 6px;border-bottom:2px solid #fbbf24;padding-bottom:3px}
+table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ecdcc8;padding:4px 6px;text-align:left}
+thead{display:table-header-group}th{background:#fff2c2;color:#7a1426;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+tr{page-break-inside:avoid}tr:nth-child(even) td{background:#fffaf0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.ft{margin-top:10px;color:#64748b;font-size:10px}
+.pb{page-break-before:always}
+</style></head><body>
+<div class="hd"><img src="${logo}" alt=""><div><h1>USBTS — ${TNAME[R.type]} Smart Board Usage Report</h1><p>Uva Smartboard Tracking System · ඌව පලාත් Smart Board නිරීක්ෂණ වාර්තාව</p></div></div>
+<div class="meta"><span><b>Period:</b> ${esc(R.from)} → ${esc(R.to)}</span><span><b>Scope:</b> ${esc(R.scope)}</span><span><b>Schools:</b> ${R.summary.length}</span><span><b>Boards:</b> ${R.boardCount}</span>
+<span><b>Total ON:</b> ${hm(tot.on)}</span><span><b>Total in use:</b> ${hm(tot.act)}</span><span><b>Generated:</b> ${esc(R.generated)}</span></div>
+<h2>Summary by school (whole period)</h2>
+<table><thead>${tr(['School','Zone','Boards','Days with data','Powered ON','In use','Usage %'],1)}</thead><tbody>${sumRows}</tbody></table>
+<h2 class="pb">${TNAME[R.type]} detail (school × period)</h2>
+<table><thead>${tr(['Period','School','Boards','Days with data','Powered ON','In use','Usage %'],1)}</thead><tbody>${detRows}</tbody></table>
+<p class="ft">Powered ON = time the board PC was on · In use = time with touch/mouse/keyboard activity · Usage % = In use ÷ Powered ON. Weeks start on Monday; the first/last week may be partial.</p>
+</body></html>`);
+  w.document.close();
+  const go=()=>{try{w.focus();w.print();}catch(e){}};
+  const im=w.document.images[0];
+  if(im&&!im.complete)im.onload=im.onerror=()=>setTimeout(go,150);else setTimeout(go,300);
+}
+$('rload').onclick=repLoad;
+$('rcsv').onclick=()=>R&&repCSV();
+$('rxls').onclick=()=>R&&repXLS();
+$('rpdf').onclick=()=>R&&repPDF();
+
+/* ---------- theme (light / dark) ---------- */
+(function(){
+  let t=null;try{t=localStorage.getItem('theme');}catch(e){}
+  if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+  const set=v=>{document.documentElement.dataset.theme=v;try{localStorage.setItem('theme',v);}catch(e){}};
+  set(t);
+  $('theme').onclick=()=>set(document.documentElement.dataset.theme==='dark'?'light':'dark');
+})();
+
 /* ---------- map ---------- */
 function initMap(){
   if(map){map.invalidateSize();return;}
@@ -331,11 +549,11 @@ function render(fit){
   const infos=currentInfos();
   const c={on:0,idle:0,off:0,pending:0},cov=new Set();
   infos.forEach(x=>{c[x.state]++;if(x.sc)cov.add(x.sc.c);});
-  const stat=(v,l)=>`<div class="stat"><b>${v}</b>${l}</div>`;
-  $('stats').innerHTML=stat(infos.length,'Total')+stat(c.on+c.idle,'Online')+stat(c.on,'Active (භාවිතයේ)')
-    +stat(c.idle,'භාවිතා නොවේ')+stat(c.off,'Offline')+stat(c.pending,'අනුමත කර නැත')
+  const stat=(v,l,st)=>`<div class="stat${st&&F.st===st?' sel':''}"${st!==undefined?` data-st="${st}" title="ක්ලික් කර පෙරන්න"`:''}><b>${v}</b>${l}</div>`;
+  $('stats').innerHTML=stat(infos.length,'Total','')+stat(c.on+c.idle,'Online')+stat(c.on,'Active (භාවිතයේ)','on')
+    +stat(c.idle,'භාවිතා නොවේ','idle')+stat(c.off,'Offline','off')+stat(c.pending,'අනුමත කර නැත','pending')
     +stat(`${cov.size} / ${SCHOOLS.filter(sMatch).length}`,'බෝඩ් ඇති පාසල්');
-  drawMap(infos,fit===true);
+  drawMap(infos,fit===true);repScope(infos);
   if(view==='school')renderSchools(infos);else renderBoards(infos);
 }
 const actions=x=>(x.b.approved?'':`<button class="sm" data-ok="${esc(x.id)}">අනුමත කරන්න</button> `)
@@ -403,6 +621,8 @@ async function showHist(id){
 $('app').onclick=async e=>{
   try{
     const t=e.target,d=t.dataset;
+    const sc0=t.closest('.stat[data-st]');
+    if(sc0){const v=sc0.dataset.st;F.st=F.st===v?'':v;$('fs').value=F.st;render(true);return;}
     if(d.ok){await db.doc('boards/'+d.ok).update({approved:true});return;}
     if(d.del){
       if(confirm('"'+boards[d.del].name+'" බෝඩ් එක මකන්නද?')){
