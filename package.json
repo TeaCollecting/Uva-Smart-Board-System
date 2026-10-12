@@ -1,0 +1,18 @@
+{
+  "name": "smartboard-agent",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.js",
+  "description": "Smart Board monitoring agent",
+  "author": "School IT",
+  "repository": "https://github.com/YOUR_USER/YOUR_REPO",
+  "scripts": { "start": "electron ." },
+  "dependencies": { "firebase": "^10.12.2" },
+  "devDependencies": { "electron": "^31.0.0", "electron-builder": "^24.13.3" },
+  "build": {
+    "appId": "lk.school.smartboardagent",
+    "productName": "SmartBoardAgent",
+    "files": ["main.js", "index.html", "renderer.js", "firebase-config.js", "schools.json", "logo.png", "icon.ico", "package.json"],
+    "win": { "target": "nsis", "icon": "icon.ico" }
+  }
+}
